@@ -3,5 +3,7 @@ use pkimgr::pki::Pki;
 pub fn main() {
     let pki: Pki = Pki::new();
 
-    pki.add_certificate(3072, None).unwrap();
+    println!("Generate new authority");
+
+    pki.add_authority(3072, String::from("authority")).unwrap();
 }

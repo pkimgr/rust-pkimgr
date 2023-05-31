@@ -1,42 +1,44 @@
 use openssl::{
     pkey::{PKey, Private},
     rsa::Rsa,
-    x509::{X509, X509Builder, X509NameBuilder}, asn1::{ Asn1Integer, Asn1Time}, bn::BigNum,
+    x509::{X509, X509Builder, extension::BasicConstraints},
+    asn1::Asn1Integer,
+    bn::BigNum,
 };
 
-pub fn generate_rsa_certificate(public_key: Rsa<Private>, authority: Option<X509>) -> X509 {
-    let mut x509_builder: X509Builder = X509::builder().unwrap();
+use crate::certificates::{x509_name, x509_builder};
 
-    let mut x509_name = X509NameBuilder::new().unwrap();
-    x509_name.append_entry_by_text("C", "uk").unwrap();
-    x509_name.append_entry_by_text("ST", "uk").unwrap();
-    x509_name.append_entry_by_text("O", "New organization").unwrap();
-    x509_name.append_entry_by_text("CN", "www.example.com").unwrap();
-    let x509_name = x509_name.build();
-
-    match authority {
-        Some(x) => {dbg!(x); ()},
-        _ => {println!("coucou"); x509_builder.set_issuer_name(&x509_name).unwrap()}
+pub fn generate_rsa_authority(public_key: Rsa<Private>, serial: u32) -> Result<X509, &'static str> {
+    // Name
+    let x509name = match x509_name() {
+        Ok(name ) => name,
+        Err(error) => {
+            eprintln!("Cannot get name {}", error);
+            return Err("Cannot get name");
+        }
     };
-    x509_builder.set_subject_name(&x509_name).unwrap(); 
-
-    x509_builder.set_not_before(
-        &Asn1Time::days_from_now(0).unwrap()
-    ).unwrap();
-    
-    x509_builder.set_not_after(
-        &Asn1Time::days_from_now(365).unwrap()
-    ).unwrap();
-    
-    x509_builder.set_pubkey(
+    // builder
+    let mut builder: X509Builder = match x509_builder(serial) {
+        Ok(cert) => cert,
+        Err(error) => {
+            eprintln!("Error {}", error);
+            return Err("Cannot create certificate");
+        }
+    };
+    // Set specific fields
+    builder.set_subject_name(&x509name).unwrap();
+    builder.set_pubkey(
         &PKey::from_rsa(public_key).unwrap()
     ).unwrap();
-   
-    x509_builder.set_serial_number(
+    builder.set_serial_number(
         &Asn1Integer::from_bn(
-            &BigNum::from_u32(1256789).unwrap()
+            &BigNum::from_u32(serial).unwrap()
         ).unwrap()
     ).unwrap();
-    
-    x509_builder.build() 
+
+    let mut bc = BasicConstraints::new();
+    let ca = bc.ca();
+    builder.append_extension(ca.build().unwrap()).unwrap();
+
+    Ok(builder.build())
 }

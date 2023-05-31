@@ -14,43 +14,40 @@ use crate::keys::rsa::generate_rsa_key;
 use crate::certificates::x509;
 
 pub struct Pki {
-    pub name: String,
+    pub name: &'static str,
     authority: HashMap<String, (X509, Rsa<Private>)>,
     certs: HashMap<String, (X509, Rsa<Private>)>,
+    serial: u32,
 }
 
 impl Pki {
     pub fn new() -> Pki {
         Pki {
-            name: String::from("NewPki"),
+            name: "newPki",
             authority: HashMap::new(),
-            certs:HashMap::new()
+            certs:HashMap::new(),
+            serial: 0,
         }
     }
 
-    pub fn add_certificate(&self, length: u32, authority: Option<X509>) -> Result<(), ()>{
+    pub fn add_authority(&self, length: u32, name: String) -> Result<&Self, &'static str> {
         let key: Rsa<Private> = generate_rsa_key(length);
-        let private_key: Vec<u8> = key.private_key_to_pem().unwrap();
-        let cert: X509 = x509::generate_rsa_certificate(key, authority);
-        let mut key_file = File::create("test.pem").unwrap();
-        let mut cert_file = File::create("test.crt").unwrap();
+        let private: Vec<u8> = key.private_key_to_pem().unwrap();
+        let cert = x509::generate_rsa_authority(key, self.serial)?;
 
-        let t = cert.to_text().unwrap();
-         
-        key_file.write_all(&private_key).unwrap();
-        cert_file.write_all(&t).unwrap();
+        let mut key_file = File::create(format!("{}.pem", name)).unwrap();
+        let mut cert_file = File::create(format!("{}.crt", name)).unwrap();
 
-        Ok(())
+        key_file.write_all(&private).unwrap();
+        cert_file.write_all(&cert.to_text().unwrap()).unwrap();
+
+        Ok(self)
     }
 
     pub fn get_authorities(&self) -> Vec<&String> {
-        let t: Vec<&String> = self.authority
+        self.authority
             .iter()
-            .fold(Vec::new(), |mut acc, (k, _)| {acc.push(k); acc });
-
-        dbg!(t);
-
-        Vec::new()
+            .fold(Vec::new(), |mut acc, (k, _)| {acc.push(k); acc })
     }
 }
 
