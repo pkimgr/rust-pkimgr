@@ -1,25 +1,13 @@
-use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    path::Path
+};
+
+use crate::{certificates::CertBuilders, pki::Pki};
 
 pub mod certificates;
+pub mod configuration;
 pub mod pki;
-pub mod pki_serializer;
-
-#[derive(Serialize, Deserialize, Clone, Copy)]
-pub struct Configuration <'a> {
-    pub country: &'a str,
-    pub state: &'a str,
-    pub organization: &'a str,
-    pub validity: u32,
-}
-
-pub const DEFAULT_CONFIGURATION: &str = r#"
-{
-    "country": "UK",
-    "state": "UK",
-    "organization": "PoweredByPKImgr",
-    "validity": 365
-}"#;
-
 
 pub const BANNER: &str = r#"
            __                    __  ____      __         __
@@ -34,3 +22,36 @@ pub const BANNER: &str = r#"
     /_/   /_/ |_/___/_/ /_/ /_/\__, /_/
           rust edition        /____/
 "#;
+
+
+
+pub struct Pkimgr<'a> {
+    pki: HashMap<String, Pki<'a>>,
+}
+
+impl <'a> Pkimgr<'a> {
+    pub fn new() ->  Pkimgr<'a> {
+        Pkimgr {
+            pki: HashMap::new()
+        }
+    }
+
+    pub fn new_pki(&mut self, pki_path: &'a Path, cert_builder: &'a CertBuilders) -> &Self {
+        self.pki.insert(
+            String::from(pki_path.to_str().unwrap()),
+            Pki::new(cert_builder,  pki_path)
+                .expect("cannot create new pki")
+        );
+
+        self
+    }
+
+    pub fn pki_len(&self) -> usize {
+        self.pki.len()
+    }
+
+    pub fn list_pki(&self) -> &HashMap<String, Pki> {
+        &self.pki
+    }
+}
+

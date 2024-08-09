@@ -6,7 +6,7 @@ use openssl::{
     x509::X509NameRef,
 };
 
-use crate::Configuration;
+use crate::configuration::Configuration;
 
 pub mod x509;
 

@@ -19,7 +19,9 @@ use crate::certificates::{
     PrivateKeyEnums::PrivateRsa,
     CertBuilders,
 };
-use crate::pki_serializer::SerializedPki;
+use crate::pki::serializer::SerializedPki;
+
+pub mod serializer;
 
 const PEM_DIR: &'static str = "private";
 const CERTS_DIR: &'static str = "certs";

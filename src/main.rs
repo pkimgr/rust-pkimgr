@@ -1,12 +1,16 @@
-use std::fs;
-use std::path::Path;
-use std::str::FromStr;
+use std::{
+    fs,
+    path::Path
+};
+
 use pkimgr::certificates::CertBuilders;
 use serde_json::Result;
 use clap::Parser;
 
-use pkimgr::{BANNER, Configuration, DEFAULT_CONFIGURATION};
-use pkimgr::pki::Pki;
+use pkimgr::{BANNER,
+    configuration::{Configuration, DEFAULT_CONFIGURATION}
+};
+use pkimgr::Pkimgr;
 
 /// Simple PKI generator
 #[derive(Parser, Debug)]
@@ -34,22 +38,14 @@ pub fn main() ->Result<()> {
         false => fs::read_to_string(args.configuration_file).expect("Cannot read configuration file")
     };
 
+    let mut manager: Pkimgr = Pkimgr::new();
+
     let conf: Configuration = serde_json::from_str(&config_str)?;
-
     let cert_builders: CertBuilders = CertBuilders::new(conf);
-    let mut new_pki: Pki = Pki::new(&cert_builders, Path::new(&args.path))
-        .expect("Cannot instantiate PKI struct");
 
-    let authority_name: String = String::from_str("authority").unwrap();
-    new_pki.add_rsa_authority(2048, &authority_name).unwrap();
-
-    let service_name: String = String::from_str("service").unwrap();
-    new_pki.add_rsa_certificate(4096, &service_name, &authority_name).unwrap();
-
-    let service_name: String = String::from_str("service2").unwrap();
-    new_pki.add_rsa_certificate(4096, &service_name, &authority_name).unwrap();
-
-    new_pki.save().unwrap();
+    let path = Path::new(&args.path).join("first");
+    manager.new_pki(path.as_path(), &cert_builders);
+    dbg!(manager.list_pki().keys());
 
     Ok(())
 }

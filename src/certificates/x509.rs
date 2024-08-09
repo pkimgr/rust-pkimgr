@@ -12,7 +12,7 @@ use openssl::{
     },
 };
 
-use crate::Configuration;
+use crate::configuration::Configuration;
 use crate::certificates::{ CertArgs, CertBuilders, get_pkey };
 
 impl <'a> CertBuilders<'a> {
