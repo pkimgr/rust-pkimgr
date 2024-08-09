@@ -1,5 +1,4 @@
 output/
-pki/
 target/
 *.crt
 *.pem
