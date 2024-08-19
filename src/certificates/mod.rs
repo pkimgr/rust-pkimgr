@@ -24,7 +24,7 @@ pub struct CertArgs<'a> {
 }
 
 #[derive(Clone, Copy)]
-pub struct CertBuilders<'a> {
+pub struct CertsBuilder<'a> {
     conf: Configuration<'a>
 }
 

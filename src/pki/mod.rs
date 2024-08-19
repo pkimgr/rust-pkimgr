@@ -17,7 +17,7 @@ use crate::certificates::{
     CertArgs,
     PrivateKeyEnums,
     PrivateKeyEnums::PrivateRsa,
-    CertBuilders,
+    CertsBuilder,
 };
 use crate::pki::serializer::SerializedPki;
 
@@ -29,26 +29,28 @@ const CERTS_DIR: &'static str = "certs";
 pub struct Pki <'a> {
     authorities: HashMap<String, (X509, PrivateKeyEnums)>,
     certs: HashMap<String, (X509, PrivateKeyEnums)>,
-    path: &'a Path,
-    cert_builders: &'a CertBuilders<'a>,
+    path: Box<Path>,
+    cert_builders: Box<CertsBuilder<'a>>,
     serializer: SerializedPki
 }
 
 impl <'a> Pki<'a> {
-    pub fn new(builders: &'a CertBuilders, path: &'a Path) -> Result<Pki<'a>, Error> {
-        if !Path::exists(path) {
-            create_dir_all(Path::join(path, PEM_DIR))?;
-            create_dir_all(Path::join(path, CERTS_DIR))?;
+    pub fn new(builders: Box<CertsBuilder<'a>>, path: Box<Path>) -> Result<Pki<'a>, Error> {
+        if !Path::exists(path.as_ref()) {
+            create_dir_all(Path::join(path.as_ref(), PEM_DIR))?;
+            create_dir_all(Path::join(path.as_ref(), CERTS_DIR))?;
         } else {
             // TODO load PKI
         }
 
+        let filename = String::from(path.as_ref().file_name().unwrap()
+            .to_str().unwrap());
         Ok(Pki {
             authorities: HashMap::new(),
             certs: HashMap::new(),
             path,
-            cert_builders: &builders,
-            serializer: SerializedPki::new()
+            cert_builders: builders,
+            serializer: SerializedPki::new(filename)
         })
     }
 
@@ -68,7 +70,7 @@ impl <'a> Pki<'a> {
         self.write_files(name, cert.to_pem().unwrap(), key.private_key_to_pem().unwrap())?;
 
         self.authorities.insert(name.to_owned(), (cert, PrivateRsa(key)));
-        self.serializer.add_certificate(name,name);
+        self.serializer.add_certificate(name,name, length);
 
         Ok(self)
     }
@@ -89,7 +91,7 @@ impl <'a> Pki<'a> {
         self.write_files(name, cert.to_pem().unwrap(), key.private_key_to_pem().unwrap())?;
 
         self.certs.insert(name.to_owned(), (cert, PrivateRsa(key)));
-        self.serializer.add_certificate(name, authority_name);
+        self.serializer.add_certificate(name, authority_name, length);
 
         Ok(self)
     }
@@ -99,7 +101,7 @@ impl <'a> Pki<'a> {
     }
 
     pub fn save(self: &Self) -> Result<&Self, std::io::Error> {
-        let mut metadata_file: File = File::create(Path::join(self.path, "metadata.json"))?;
+        let mut metadata_file: File = File::create(Path::join(self.path.as_ref(), "metadata.json"))?;
         metadata_file.write_all(
             to_string_pretty(&self.serializer).unwrap().as_bytes()
         )?;
@@ -110,7 +112,7 @@ impl <'a> Pki<'a> {
 
     fn get_path(&self, to_join: &str) -> String {
         String::from(
-            Path::join(self.path, to_join)
+            Path::join(self.path.as_ref(), to_join)
                 .to_str()
                 .unwrap_or("default")
         )

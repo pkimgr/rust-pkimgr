@@ -13,11 +13,11 @@ use openssl::{
 };
 
 use crate::configuration::Configuration;
-use crate::certificates::{ CertArgs, CertBuilders, get_pkey };
+use crate::certificates::{ CertArgs, CertsBuilder, get_pkey };
 
-impl <'a> CertBuilders<'a> {
-    pub fn new(conf: Configuration) -> CertBuilders {
-        CertBuilders { conf }
+impl <'a> CertsBuilder<'a> {
+    pub fn new(conf: Configuration) -> CertsBuilder {
+        CertsBuilder { conf }
     }
 
     pub fn generate_authority(&self, args: CertArgs) -> Result<X509, ErrorStack> {

@@ -1,23 +1,24 @@
 use std::{
-    fs,
+    fs::{self, File},
     path::Path
 };
 
-use pkimgr::certificates::CertBuilders;
 use serde_json::Result;
 use clap::Parser;
 
-use pkimgr::{BANNER,
-    configuration::{Configuration, DEFAULT_CONFIGURATION}
+use pkimgr::{
+    certificates::CertsBuilder,
+    configuration::{Configuration, DEFAULT_CONFIGURATION},
+    Pkimgr,
+    BANNER
 };
-use pkimgr::Pkimgr;
 
 /// Simple PKI generator
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
-pub struct Args {
+struct Args {
     /// Path to store the PKI
-    #[arg(short, long, default_value = "output")]
+    #[arg(short, long, default_value = "./output")]
     path: String,
     /// Path of the configuration file to use
     #[arg(short, long, default_value = "")]
@@ -26,6 +27,7 @@ pub struct Args {
     #[arg()]
     pki_file: String
 }
+
 
 pub fn main() ->Result<()> {
     // TODO Log system to better output
@@ -38,14 +40,17 @@ pub fn main() ->Result<()> {
         false => fs::read_to_string(args.configuration_file).expect("Cannot read configuration file")
     };
 
-    let mut manager: Pkimgr = Pkimgr::new();
-
     let conf: Configuration = serde_json::from_str(&config_str)?;
-    let cert_builders: CertBuilders = CertBuilders::new(conf);
+    let cert_builder: CertsBuilder = CertsBuilder::new(conf);
 
-    let path = Path::new(&args.path).join("first");
-    manager.new_pki(path.as_path(), &cert_builders);
-    dbg!(manager.list_pki().keys());
+    let mut manager: Pkimgr = Pkimgr::new(
+        Box::new(cert_builder),
+        Path::new(&args.path).into()
+    );
+
+    let pki_file: File = File::open(args.pki_file).unwrap();
+
+    manager.parse_pki_file(pki_file);
 
     Ok(())
 }
