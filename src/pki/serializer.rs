@@ -9,14 +9,14 @@ pub struct SerializedCertificate {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SerializedPki {
+pub struct Serializer {
     pub pki_name: String,
     pub root: SerializedCertificate
 }
 
-impl SerializedPki {
-    pub fn new(pki_name: String) -> SerializedPki {
-        SerializedPki {
+impl Serializer {
+    pub fn new(pki_name: String) -> Serializer {
+        Serializer {
             pki_name,
             root: SerializedCertificate { cname: "".to_string(), subcerts: Vec::from([]), keylen: None }
         }

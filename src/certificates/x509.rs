@@ -12,8 +12,13 @@ use openssl::{
     },
 };
 
-use crate::configuration::Configuration;
-use crate::certificates::{ CertArgs, CertsBuilder, get_pkey };
+use super::{
+    CertArgs,
+    CertsBuilder,
+    Configuration
+};
+
+use super::utils::get_pkey;
 
 impl <'a> CertsBuilder<'a> {
     pub fn new(conf: Configuration) -> CertsBuilder {

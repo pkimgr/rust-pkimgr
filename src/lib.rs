@@ -2,9 +2,13 @@ use std::{
     collections::HashMap, fs::File, io::BufReader, path::Path
 };
 
-use pki::serializer::SerializedPki;
-
-use crate::{certificates::CertsBuilder, pki::Pki};
+use crate::{
+    certificates::CertsBuilder,
+    pki::{
+        Pki,
+        serializer::Serializer
+    }
+};
 
 pub mod certificates;
 pub mod configuration;
@@ -79,7 +83,7 @@ impl <'a> Pkimgr<'a> {
     }
 
     pub fn parse_pki_file(&mut self, pki_file: File) -> &Self {
-        let pki_serialized: SerializedPki = serde_json::from_reader(
+        let pki_serialized: Serializer = serde_json::from_reader(
             BufReader::new(pki_file)
         ).unwrap();
 

@@ -10,16 +10,18 @@ use openssl::{
     rsa::Rsa,
     x509::X509
 };
+use log::{info, debug};
 
 use serde_json::to_string_pretty;
 
-use crate::certificates::{
+use super::certificates::{
     CertArgs,
     PrivateKeyEnums,
     PrivateKeyEnums::PrivateRsa,
     CertsBuilder,
 };
-use crate::pki::serializer::SerializedPki;
+
+use super::Serializer;
 
 pub mod serializer;
 
@@ -31,31 +33,37 @@ pub struct Pki <'a> {
     certs: HashMap<String, (X509, PrivateKeyEnums)>,
     path: Box<Path>,
     cert_builders: Box<CertsBuilder<'a>>,
-    serializer: SerializedPki
+    serializer: Serializer
 }
 
 impl <'a> Pki<'a> {
     pub fn new(builders: Box<CertsBuilder<'a>>, path: Box<Path>) -> Result<Pki<'a>, Error> {
         if !Path::exists(path.as_ref()) {
+            debug!("{} not found, create it", path.to_string_lossy());
+
             create_dir_all(Path::join(path.as_ref(), PEM_DIR))?;
             create_dir_all(Path::join(path.as_ref(), CERTS_DIR))?;
         } else {
+            debug!("{} found, load it", path.to_string_lossy());
             // TODO load PKI
         }
 
         let filename = String::from(path.as_ref().file_name().unwrap()
             .to_str().unwrap());
+
+        info!("New pki on {} ready", path.to_string_lossy());
         Ok(Pki {
             authorities: HashMap::new(),
             certs: HashMap::new(),
             path,
             cert_builders: builders,
-            serializer: SerializedPki::new(filename)
+            serializer: Serializer::new(filename)
         })
     }
 
     pub fn add_rsa_authority(&mut self, length: u32, name: &String) -> Result<&Self, Error> {
         // TODO Add Subauth
+        info!("Add new RSA authority {} on {}", name, self.path.to_string_lossy());
         let key: Rsa<Private> = Rsa::generate(length)?;
 
         let cert: X509 = self.cert_builders.generate_authority(
@@ -76,6 +84,7 @@ impl <'a> Pki<'a> {
     }
 
     pub fn add_rsa_certificate(&mut self, length: u32, name: &String, authority_name: &String) -> Result<&Self, Error> {
+        info!("Add new RSA certificate {} signed by {} on {}", name, authority_name, self.path.to_string_lossy());
         let key: Rsa<Private> = Rsa::generate(length)?;
         let authority: &(X509, PrivateKeyEnums) = self.authorities.get(authority_name).unwrap();
 
@@ -131,9 +140,4 @@ impl <'a> Pki<'a> {
 
         Ok(())
     }
-
-    // fn save(&self) {
-
-
-    // }
 }

@@ -3,8 +3,10 @@ use std::{
     path::Path
 };
 
+use log::info;
 use serde_json::Result;
 use clap::Parser;
+use env_logger::{init_from_env, Env};
 
 use pkimgr::{
     certificates::CertsBuilder,
@@ -18,7 +20,7 @@ use pkimgr::{
 #[command(author, version, about)]
 struct Args {
     /// Path to store the PKI
-    #[arg(short, long, default_value = "./output")]
+    #[arg(short, long, default_value = ".")]
     path: String,
     /// Path of the configuration file to use
     #[arg(short, long, default_value = "")]
@@ -28,10 +30,13 @@ struct Args {
     pki_file: String
 }
 
-
 pub fn main() ->Result<()> {
     // TODO Log system to better output
     println!("{}", BANNER);
+
+    init_from_env(
+        Env::new().default_filter_or("info")
+    );
 
     let args: Args = Args::parse();
 
@@ -48,8 +53,9 @@ pub fn main() ->Result<()> {
         Path::new(&args.path).into()
     );
 
-    let pki_file: File = File::open(args.pki_file).unwrap();
+    let pki_file: File = File::open(&args.pki_file).unwrap();
 
+    info!("Using {} file to create PKI", args.pki_file);
     manager.parse_pki_file(pki_file);
 
     Ok(())
