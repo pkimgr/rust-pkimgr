@@ -7,12 +7,13 @@ With this project, you'll be able to create your own PKI !
 ## Installation
 
 Download the source and compile with
-``` $ cargo build ```
+`$ cargo build`
 
-To install  pkimgr tool (untested yet):
-```$ cargo install ```
+To install pkimgr tool (untested yet):
+`$ cargo install `
 
 ## Options
+
 ```
            __                    __  ____      __         __
           / /__  ____ _____     /  |/  (_)____/ /_  ___  / /
@@ -41,10 +42,17 @@ Options:
 ```
 
 ## More informations
-You can visit our [wiki](https://gitlab.com/pkimgr/python/python-pkimgr/-/wikis/home) for more informations about PKI h
+
+You can visit our [wiki](https://gitlab.com/pkimgr/python/python-pkimgr/-/wikis/home) for more informations about PKI.
 
 ## Roadmap
+
 - Be able to read pki specifications from file
 - Specify cert utility
 - embeed on pkcs12 or pkcs8
 - Rework structs to be able to dot chain creation
+- Move wiki from Gitlab to Github
+
+## Contribute
+
+Please contact us !
