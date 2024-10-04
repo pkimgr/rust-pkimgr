@@ -29,6 +29,7 @@ pub const BANNER: &str = r#"
 "#;
 const DEFAULT_KEYLEN: u32 = 4096;
 
+#[derive(Clone)]
 pub struct Pkimgr<'a> {
     certs_builder: Box<CertsBuilder<'a>>,
     base_path: Box<Path>,

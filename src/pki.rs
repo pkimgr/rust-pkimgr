@@ -28,6 +28,7 @@ pub mod serializer;
 const PEM_DIR: &'static str = "private";
 const CERTS_DIR: &'static str = "certs";
 
+#[derive(Clone)]
 pub struct Pki <'a> {
     authorities: HashMap<String, (X509, PrivateKeyEnums)>,
     certs: HashMap<String, (X509, PrivateKeyEnums)>,

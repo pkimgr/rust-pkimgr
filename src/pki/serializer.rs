@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SerializedCertificate {
     pub cname: String,
     pub subcerts: Vec<SerializedCertificate>,
@@ -8,7 +8,7 @@ pub struct SerializedCertificate {
     pub keylen: Option<u32>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Serializer {
     pub pki_name: String,
     pub root: SerializedCertificate
