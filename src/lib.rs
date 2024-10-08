@@ -30,15 +30,15 @@ pub const BANNER: &str = r#"
 const DEFAULT_KEYLEN: u32 = 4096;
 
 #[derive(Clone)]
-pub struct Pkimgr<'a> {
-    certs_builder: Box<CertsBuilder<'a>>,
+pub struct Pkimgr {
+    certs_builder: Box<CertsBuilder>,
     base_path: Box<Path>,
-    pki: HashMap<String, Pki<'a>>,
+    pki: HashMap<String, Pki>,
 }
 
 
-impl <'a> Pkimgr<'a> {
-    pub fn new(certs_builder: Box<CertsBuilder<'a>>, base_path: Box<Path>) ->  Pkimgr<'a> {
+impl Pkimgr {
+    pub fn new(certs_builder: Box<CertsBuilder>, base_path: Box<Path>) ->  Pkimgr {
         Pkimgr {
             certs_builder,
             base_path,

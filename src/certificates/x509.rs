@@ -20,12 +20,14 @@ use super::{
 
 use super::utils::get_pkey;
 
-impl <'a> CertsBuilder<'a> {
+impl CertsBuilder {
     pub fn new(conf: Configuration) -> CertsBuilder {
-        CertsBuilder { conf }
+        CertsBuilder {
+            conf: Box::new(conf)
+        }
     }
 
-    pub fn generate_authority(&self, args: CertArgs) -> Result<X509, ErrorStack> {
+    pub fn generate_authority(self: &Self, args: CertArgs) -> Result<X509, ErrorStack> {
         // name
         let mut name_builder: X509NameBuilder = self.get_name_builder()?;
         name_builder.append_entry_by_text("CN", &args.name)?;
@@ -34,7 +36,7 @@ impl <'a> CertsBuilder<'a> {
         let pkey: PKey<Private> = get_pkey(args.key)?;
 
         // builder
-        let mut cert_builder: X509Builder  =  self.get_x509_builder(&pkey)?;
+        let mut cert_builder: X509Builder  =  self.clone().get_x509_builder(&pkey)?;
         cert_builder.set_issuer_name(&name)?;
         cert_builder.set_subject_name(&name)?;
 
@@ -77,17 +79,18 @@ impl <'a> CertsBuilder<'a> {
         Ok(cert_builder.build())
     }
 
-    fn get_name_builder(self) -> Result<X509NameBuilder, ErrorStack> {
+    fn get_name_builder(self: &Self) -> Result<X509NameBuilder, ErrorStack> {
         let mut name_builder: X509NameBuilder = X509NameBuilder::new()?;
 
-        name_builder.append_entry_by_text("C", self.conf.country)?;
-        name_builder.append_entry_by_text("ST", self.conf.state)?;
-        name_builder.append_entry_by_text("O", self.conf.organization)?;
+        let conf: Configuration = *self.conf.clone();
+        name_builder.append_entry_by_text("C", &conf.country)?;
+        name_builder.append_entry_by_text("ST", &conf.state)?;
+        name_builder.append_entry_by_text("O", &conf.organization)?;
 
         Ok(name_builder)
     }
 
-    fn get_x509_builder(self, pkey: &PKey<Private>) -> Result<X509Builder, ErrorStack> {
+    fn get_x509_builder(self: &Self, pkey: &PKey<Private>) -> Result<X509Builder, ErrorStack> {
         let mut x509_builder : X509Builder= X509::builder()?;
 
         x509_builder.set_version(2)?;
@@ -111,7 +114,7 @@ impl <'a> CertsBuilder<'a> {
         Ok(x509_builder)
     }
 
-    fn get_x509_req(self, pkey: &PKey<Private>, cname: &String) -> Result<X509Req, ErrorStack> {
+    fn get_x509_req(self: &Self, pkey: &PKey<Private>, cname: &String) -> Result<X509Req, ErrorStack> {
         let mut req_builder: X509ReqBuilder = X509ReqBuilder::new()?;
         req_builder.set_pubkey(&pkey)?;
 

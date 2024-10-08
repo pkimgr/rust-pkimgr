@@ -29,16 +29,16 @@ const PEM_DIR: &'static str = "private";
 const CERTS_DIR: &'static str = "certs";
 
 #[derive(Clone)]
-pub struct Pki <'a> {
+pub struct Pki {
     authorities: HashMap<String, (X509, PrivateKeyEnums)>,
     certs: HashMap<String, (X509, PrivateKeyEnums)>,
     path: Box<Path>,
-    cert_builders: Box<CertsBuilder<'a>>,
+    cert_builders: Box<CertsBuilder>,
     serializer: Serializer
 }
 
-impl <'a> Pki<'a> {
-    pub fn new(builders: Box<CertsBuilder<'a>>, path: Box<Path>) -> Result<Pki<'a>, Error> {
+impl Pki {
+    pub fn new(builders: Box<CertsBuilder>, path: Box<Path>) -> Result<Pki, Error> {
         if !Path::exists(path.as_ref()) {
             debug!("{} not found, create it", path.to_string_lossy());
 
@@ -67,7 +67,9 @@ impl <'a> Pki<'a> {
         info!("Add new RSA authority {} on {}", name, self.path.to_string_lossy());
         let key: Rsa<Private> = Rsa::generate(length)?;
 
-        let cert: X509 = self.cert_builders.generate_authority(
+        let builder: CertsBuilder = *self.cert_builders.clone();
+        let cert: X509 = builder.generate_authority(
+        // let cert: X509 = self.cert_builders.to_owned().generate_authority(
             CertArgs {
                 authority_issuer: None,
                 authority_pkey: None,

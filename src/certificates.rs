@@ -23,7 +23,7 @@ pub struct CertArgs<'a> {
     pub name: String,
 }
 
-#[derive(Clone, Copy)]
-pub struct CertsBuilder<'a> {
-    conf: Configuration<'a>
+#[derive(Clone)]
+pub struct CertsBuilder {
+    conf: Box<Configuration>
 }

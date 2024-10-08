@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
-pub struct Configuration <'a> {
-    pub country: &'a str,
-    pub state: &'a str,
-    pub organization: &'a str,
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Configuration {
+    pub country: String,
+    pub state: String,
+    pub organization: String,
     pub validity: u32,
 }
 
