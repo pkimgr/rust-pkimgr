@@ -9,7 +9,6 @@ use clap::Parser;
 use env_logger::{init_from_env, Env};
 
 use pkimgr::{
-    certificates::CertsBuilder,
     configuration::{Configuration, DEFAULT_CONFIGURATION},
     Pkimgr,
     BANNER
@@ -45,11 +44,10 @@ pub fn main() ->Result<()> {
         false => fs::read_to_string(args.configuration_file).expect("Cannot read configuration file")
     };
 
-    let conf: Configuration = serde_json::from_str(&config_str)?;
-    let cert_builder: CertsBuilder = CertsBuilder::new(conf);
+    let configuration: Configuration = serde_json::from_str(&config_str)?;
 
     let mut manager: Pkimgr = Pkimgr::new(
-        Box::new(cert_builder),
+        Box::new(configuration),
         Path::new(&args.path).into()
     );
 

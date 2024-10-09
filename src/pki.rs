@@ -14,11 +14,13 @@ use log::{info, debug};
 
 use serde_json::to_string_pretty;
 
+use crate::configuration::Configuration;
+
 use super::certificates::{
     CertArgs,
     PrivateKeyEnums,
     PrivateKeyEnums::PrivateRsa,
-    CertsBuilder,
+    x509::{generate_certificate, generate_authority}
 };
 
 use super::Serializer;
@@ -33,12 +35,12 @@ pub struct Pki {
     authorities: HashMap<String, (X509, PrivateKeyEnums)>,
     certs: HashMap<String, (X509, PrivateKeyEnums)>,
     path: Box<Path>,
-    cert_builders: Box<CertsBuilder>,
-    serializer: Serializer
+    serializer: Serializer,
+    configuration: Box<Configuration>
 }
 
 impl Pki {
-    pub fn new(builders: Box<CertsBuilder>, path: Box<Path>) -> Result<Pki, Error> {
+    pub fn new(path: Box<Path>, configuration: Box<Configuration>) -> Result<Pki, Error> {
         if !Path::exists(path.as_ref()) {
             debug!("{} not found, create it", path.to_string_lossy());
 
@@ -57,24 +59,23 @@ impl Pki {
             authorities: HashMap::new(),
             certs: HashMap::new(),
             path,
-            cert_builders: builders,
-            serializer: Serializer::new(filename)
+            serializer: Serializer::new(filename),
+            configuration
         })
     }
 
-    pub fn add_rsa_authority(&mut self, length: u32, name: &String) -> Result<&Self, Error> {
+    pub fn add_rsa_authority(self: &mut Self, length: u32, name: &String) -> Result<&Self, Error> {
         // TODO Add Subauth
         info!("Add new RSA authority {} on {}", name, self.path.to_string_lossy());
         let key: Rsa<Private> = Rsa::generate(length)?;
 
-        let builder: CertsBuilder = *self.cert_builders.clone();
-        let cert: X509 = builder.generate_authority(
-        // let cert: X509 = self.cert_builders.to_owned().generate_authority(
+        let cert: X509 = generate_authority(
             CertArgs {
-                authority_issuer: None,
+                authority_issuer: Box::new(None),
                 authority_pkey: None,
                 key: PrivateRsa(key.to_owned()),
                 name: name.to_owned(),
+                cert_entries: Box::new(self.configuration.x509_certs_entries.clone())
             }
         )?;
 
@@ -86,17 +87,18 @@ impl Pki {
         Ok(self)
     }
 
-    pub fn add_rsa_certificate(&mut self, length: u32, name: &String, authority_name: &String) -> Result<&Self, Error> {
+    pub fn add_rsa_certificate(self: &mut Self, length: u32, name: &String, authority_name: &String) -> Result<&Self, Error> {
         info!("Add new RSA certificate {} signed by {} on {}", name, authority_name, self.path.to_string_lossy());
         let key: Rsa<Private> = Rsa::generate(length)?;
-        let authority: &(X509, PrivateKeyEnums) = self.authorities.get(authority_name).unwrap();
+        let (issuer_cert, issuer_key): &(X509, PrivateKeyEnums) = self.authorities.get(authority_name).unwrap();
 
-        let cert: X509 = self.cert_builders.generate_certificate(
+        let cert: X509 = generate_certificate(
             CertArgs {
-                authority_issuer: Some(authority.0.subject_name()),
-                authority_pkey: Some(authority.1.to_owned()),
+                authority_issuer: Box::new(Some(issuer_cert.subject_name().to_owned()?)),
+                authority_pkey: Some(issuer_key.to_owned()),
                 key: PrivateRsa(key.to_owned()),
                 name: name.to_owned(),
+                cert_entries: Box::new(self.configuration.x509_certs_entries.clone())
             }
         )?;
 
@@ -106,10 +108,6 @@ impl Pki {
         self.serializer.add_certificate(name, authority_name, length);
 
         Ok(self)
-    }
-
-    pub fn get_authority_from_name(self: &Self, cert_name: &String) -> Option<&(X509, PrivateKeyEnums)> {
-        self.authorities.get(cert_name)
     }
 
     pub fn save(self: &Self) -> Result<&Self, std::io::Error> {
@@ -122,7 +120,7 @@ impl Pki {
     }
     // Privates
 
-    fn get_path(&self, to_join: &str) -> String {
+    fn get_path(self: &Self, to_join: &str) -> String {
         String::from(
             Path::join(self.path.as_ref(), to_join)
                 .to_str()
@@ -130,7 +128,7 @@ impl Pki {
         )
     }
 
-    fn write_files(&self, name: &String, cert_pem: Vec<u8>, private_key: Vec<u8>) -> Result<(), Error> {
+    fn write_files(self: &Self, name: &String, cert_pem: Vec<u8>, private_key: Vec<u8>) -> Result<(), Error> {
         let mut key_file: File = File::create(
             format!("{}/{}.pem", self.get_path(PEM_DIR), name)
         ).unwrap();
