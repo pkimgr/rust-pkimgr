@@ -30,7 +30,6 @@ struct Args {
 }
 
 pub fn main() ->Result<()> {
-    // TODO Log system to better output
     println!("{}", BANNER);
 
     init_from_env(
