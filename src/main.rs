@@ -46,14 +46,15 @@ pub fn main() ->Result<()> {
     let configuration: Configuration = serde_json::from_str(&config_str)?;
 
     let mut manager: Pkimgr = Pkimgr::new(
-        Box::new(configuration),
+        configuration,
         Path::new(&args.path).into()
     );
 
     let pki_file: File = File::open(&args.pki_file).unwrap();
 
     info!("Using {} file to create PKI", args.pki_file);
-    manager.parse_pki_file(pki_file);
+
+    manager.parse_pki_file(pki_file).expect("Cannot parse PKI file");
 
     Ok(())
 }

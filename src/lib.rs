@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::BufReader,
-    path::Path
+    path::PathBuf
 };
 
 use configuration::Configuration;
@@ -33,14 +33,14 @@ const DEFAULT_KEYLEN: u32 = 4096;
 
 #[derive(Clone)]
 pub struct Pkimgr {
-    default_conf: Box<Configuration>,
-    base_path: Box<Path>,
+    default_conf: Configuration,
+    base_path: PathBuf,
     pki: HashMap<String, Pki>,
 }
 
 
 impl Pkimgr {
-    pub fn new(configuration: Box<Configuration>, base_path: Box<Path>) ->  Pkimgr {
+    pub fn new(configuration: Configuration, base_path: PathBuf) ->  Pkimgr {
         Pkimgr {
             default_conf: configuration,
             // certs_builder,
@@ -53,32 +53,29 @@ impl Pkimgr {
         self.pki.keys().collect()
     }
 
-    pub fn new_pki(self: &mut Self, pki_name: &String, config: Option<Configuration>) -> &Self {
+    pub fn new_pki(self: &mut Self, pki_name: &String, config: Option<Configuration>) -> Pki {
         let configuration = match config {
             None => self.default_conf.clone(),
-            Some(c) => Box::new(c)
+            Some(c) => c
         };
-        self.pki.insert(
-            pki_name.to_owned(),
-            Pki::new(
-                self.base_path.join(pki_name).into(),
-                configuration,
-            ).expect("cannot create new pki")
-        );
 
-        self
+        Pki::new(
+            self.base_path.join(pki_name).into(),
+            configuration
+        ).expect("Cannot create new pki")
     }
 
-    pub fn add_authority(self: &mut Self, pki_name: &String, cert_name: &String, key_len: Option<u32>) -> &Self {
-        self.pki.get_mut(pki_name)
-            .unwrap()
-            .add_rsa_authority(
-                key_len.unwrap_or(DEFAULT_KEYLEN),
-                cert_name,
-            )
-            .unwrap();
+    pub fn add_authority(self: &mut Self, pki_name: &String, cert_name: &String, key_len: Option<u32>) -> Result<&Self, String> {
+        let pki = self.pki.get_mut(pki_name)
+            .ok_or_else(|| format!("PKI {} not found", pki_name))?;
 
-        self
+        pki.add_rsa_authority(
+            key_len.unwrap_or(DEFAULT_KEYLEN),
+            cert_name,
+        )
+        .map_err(|err| format!("Failed to add RSA authority: {}", err))?;
+
+        Ok(self)
     }
 
     pub fn add_certificate(self: &mut Self, pki_name: &String, cert_name: &String, authority_name: &String, key_len: Option<u32>) -> &Self {
@@ -94,7 +91,7 @@ impl Pkimgr {
         self
     }
 
-    pub fn parse_pki_file(self: &mut Self, pki_file: File) -> &Self {
+    pub fn parse_pki_file(self: &mut Self, pki_file: File) -> Result<&Self, String> {
         let pki_serialized: Serializer = serde_json::from_reader(
             BufReader::new(pki_file)
         ).unwrap();
@@ -104,7 +101,7 @@ impl Pkimgr {
             &pki_serialized.pki_name,
             &pki_serialized.root.cname,
             pki_serialized.root.keylen
-        );
+        )?;
 
         for cert in pki_serialized.root.subcerts {
             if cert.subcerts.len() == 0 {
@@ -117,6 +114,6 @@ impl Pkimgr {
             }
         }
 
-        self
+        Ok(self)
     }
 }

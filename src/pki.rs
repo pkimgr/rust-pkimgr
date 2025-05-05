@@ -1,5 +1,5 @@
 use std::fs::{ File, create_dir_all };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{
     io::{ Error, Write },
     collections::HashMap,
@@ -34,13 +34,13 @@ const CERTS_DIR: &'static str = "certs";
 pub struct Pki {
     authorities: HashMap<String, (X509, PrivateKeyEnums)>,
     certs: HashMap<String, (X509, PrivateKeyEnums)>,
-    path: Box<Path>,
+    path: PathBuf,
     serializer: Serializer,
-    configuration: Box<Configuration>
+    configuration: Configuration
 }
 
 impl Pki {
-    pub fn new(path: Box<Path>, configuration: Box<Configuration>) -> Result<Pki, Error> {
+    pub fn new(path: PathBuf, configuration: Configuration) -> Result<Pki, Error> {
         if !Path::exists(path.as_ref()) {
             debug!("{} not found, create it", path.to_string_lossy());
 
@@ -51,7 +51,7 @@ impl Pki {
             // TODO load PKI
         }
 
-        let filename = String::from(path.as_ref().file_name().unwrap()
+        let filename = String::from(path.file_name().unwrap()
             .to_str().unwrap());
 
         info!("New pki on {} ready", path.to_string_lossy());
@@ -110,6 +110,14 @@ impl Pki {
         Ok(self)
     }
 
+    pub fn get_configuration(self: &Self) -> Configuration {
+        self.configuration.clone()
+    }
+
+    pub fn get_path(self: &Self) -> PathBuf {
+        self.path.clone()
+    }
+
     pub fn save(self: &Self) -> Result<&Self, std::io::Error> {
         let mut metadata_file: File = File::create(Path::join(self.path.as_ref(), "metadata.json"))?;
         metadata_file.write_all(
@@ -120,9 +128,9 @@ impl Pki {
     }
     // Privates
 
-    fn get_path(self: &Self, to_join: &str) -> String {
+    fn join_path(self: &Self, to_join: &str) -> String {
         String::from(
-            Path::join(self.path.as_ref(), to_join)
+            Path::join(self.path.as_path(), to_join)
                 .to_str()
                 .unwrap_or("default")
         )
@@ -130,10 +138,10 @@ impl Pki {
 
     fn write_files(self: &Self, name: &String, cert_pem: Vec<u8>, private_key: Vec<u8>) -> Result<(), Error> {
         let mut key_file: File = File::create(
-            format!("{}/{}.pem", self.get_path(PEM_DIR), name)
+            format!("{}/{}.pem", self.join_path(PEM_DIR), name)
         ).unwrap();
         let mut cert_file: File = File::create(
-            format!("{}/{}.crt", self.get_path(CERTS_DIR), name)
+            format!("{}/{}.crt", self.join_path(CERTS_DIR), name)
         ).unwrap();
 
         key_file.write_all(&private_key)?;
