@@ -10,7 +10,7 @@ use env_logger::{init_from_env, Env};
 
 use pkimgr::{
     configuration::{Configuration, DEFAULT_CONFIGURATION},
-    Pkimgr,
+    cli::pkimgr::Pkimgr,
     BANNER
 };
 

@@ -3,32 +3,19 @@ use openssl::{
     bn::{ BigNum, MsbOption },
     error::ErrorStack,
     hash::MessageDigest,
-    pkey::{ PKey, Private },
+    pkey::{ PKey, Private, Public },
     x509::{
         extension::{BasicConstraints, KeyUsage},
         X509Builder,
         X509Name,
         X509NameBuilder,
-        X509NameRef,
         X509Req,
         X509ReqBuilder,
         X509
     }
 };
-use serde::{Deserialize, Serialize};
 
-use super::{
-    CertArgs,
-    utils::get_pkey
-};
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct CertEntries {
-    pub country: Box<str>,
-    pub state: Box<str>,
-    pub organization: Box<str>,
-    pub validity: u32
-}
+use crate::certificates::{X509CertEntries, CertArgs};
 
 
 pub fn generate_authority(args: CertArgs) -> Result<X509, ErrorStack> {
@@ -37,10 +24,10 @@ pub fn generate_authority(args: CertArgs) -> Result<X509, ErrorStack> {
     name_builder.append_entry_by_text("CN", &args.name)?;
 
     let name: X509Name = name_builder.build();
-    let pkey: PKey<Private> = get_pkey(args.key)?;
+    let public_key: PKey<Public> = args.key.get_public_key()?;
 
     // builder
-    let mut cert_builder: X509Builder  =  _get_x509_builder(&args.cert_entries, &pkey)?;
+    let mut cert_builder: X509Builder  =  _get_x509_builder(&args.cert_entries, &public_key)?;
     cert_builder.set_issuer_name(&name)?;
     cert_builder.set_subject_name(&name)?;
 
@@ -58,7 +45,8 @@ pub fn generate_authority(args: CertArgs) -> Result<X509, ErrorStack> {
             .build()?
     )?;
 
-    cert_builder.sign(&pkey, MessageDigest::sha3_256())?;
+    let private_key: PKey<Private> = args.key.get_private_key()?;
+    cert_builder.sign(&private_key, MessageDigest::sha3_256())?;
 
     Ok(cert_builder.build())
 }
@@ -69,25 +57,25 @@ pub fn generate_certificate(args: CertArgs) -> Result<X509, ErrorStack> {
     name_builder.append_entry_by_text("CN", &args.name)?;
 
     // Create CSR
-    let key: PKey<Private> = get_pkey(args.key)?;
+    let key: PKey<Private> = args.key.get_private_key()?;
     let req: X509Req = _get_x509_req(&key, name_builder)?;
 
     // Authority key
-    let cert_authority: &X509NameRef = &args.authority_issuer.ok_or("Cannot find Authority").unwrap();
-    let ca_pkey: PKey<Private> = get_pkey(args.authority_pkey.unwrap())?;
+    let cert_authority: &X509Name = &args.authority_issuer.ok_or(ErrorStack::get())?;
+    let ca_pkey: PKey<Private> = args.authority_pkey.ok_or(ErrorStack::get())?;
 
     // cert
-    let mut cert_builder: X509Builder = _get_x509_builder(&args.cert_entries, &key)?;
+    let public_key: PKey<Public> = args.key.get_public_key()?;
+    let mut cert_builder: X509Builder = _get_x509_builder(&args.cert_entries, &public_key)?;
     cert_builder.set_subject_name(&req.subject_name())?;
     cert_builder.set_issuer_name(cert_authority)?;
-
 
     cert_builder.sign(&ca_pkey, MessageDigest::sha3_256())?;
 
     Ok(cert_builder.build())
 }
 
-fn _get_name_builder(cert_conf: &CertEntries) -> Result<X509NameBuilder, ErrorStack> {
+fn _get_name_builder(cert_conf: &X509CertEntries) -> Result<X509NameBuilder, ErrorStack> {
     let mut name_builder: X509NameBuilder = X509NameBuilder::new()?;
 
     name_builder.append_entry_by_text("C", &cert_conf.country)?;
@@ -97,7 +85,7 @@ fn _get_name_builder(cert_conf: &CertEntries) -> Result<X509NameBuilder, ErrorSt
     Ok(name_builder)
 }
 
-fn _get_x509_builder(cert_conf: &CertEntries, pkey: &PKey<Private>) -> Result<X509Builder, ErrorStack> {
+fn _get_x509_builder(cert_conf: &X509CertEntries, key: &PKey<Public>) -> Result<X509Builder, ErrorStack> {
     let mut x509_builder : X509Builder= X509::builder()?;
 
     x509_builder.set_version(2)?;
@@ -116,7 +104,7 @@ fn _get_x509_builder(cert_conf: &CertEntries, pkey: &PKey<Private>) -> Result<X5
     };
     x509_builder.set_serial_number(&serial_number)?;
 
-    x509_builder.set_pubkey(&pkey)?;
+    x509_builder.set_pubkey(&key)?;
 
     Ok(x509_builder)
 }

@@ -4,21 +4,22 @@ use serde::{Serialize, Deserialize};
 pub struct SerializedCertificate {
     pub cname: String,
     pub subcerts: Vec<SerializedCertificate>,
+    pub curve: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub keylen: Option<u32>
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Serializer {
+pub struct PkiSerializer {
     pub pki_name: String,
     pub root: SerializedCertificate
 }
 
-impl Serializer {
-    pub fn new(pki_name: String) -> Serializer {
-        Serializer {
+impl PkiSerializer {
+    pub fn new(pki_name: String) -> PkiSerializer {
+        PkiSerializer {
             pki_name,
-            root: SerializedCertificate { cname: "".to_string(), subcerts: Vec::from([]), keylen: None }
+            root: SerializedCertificate { cname: "".to_string(), subcerts: Vec::from([]), keylen: None, curve: None }
         }
     }
 
@@ -37,7 +38,8 @@ fn recurse_add(cert: &mut SerializedCertificate, cname: &String, auth_cname: &St
         cert.subcerts.push(SerializedCertificate {
             cname: cname.to_owned(),
             subcerts: Vec::from([]),
-            keylen: Some(key_len)
+            keylen: Some(key_len),
+            curve: None
         });
 
         return true

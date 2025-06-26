@@ -1,24 +1,24 @@
 use openssl::{
-    ec::EcKey,
-    pkey::Private,
-    rsa::Rsa,
-    x509::X509Name,
+
+    pkey::{PKey, Private}, x509::X509Name
 };
-use x509::CertEntries;
+use serde::{Deserialize, Serialize};
 
 pub mod x509;
-mod utils;
+use crate::key::Key;
 
-#[derive(Clone)]
-pub enum PrivateKeyEnums {
-    PrivateRsa(Rsa<Private>),
-    Ecurve(EcKey<Private>),
+#[derive(Serialize, Deserialize, Clone)]
+pub struct X509CertEntries {
+    pub country: Box<str>,
+    pub state: Box<str>,
+    pub organization: Box<str>,
+    pub validity: u32
 }
 
-pub struct CertArgs {
-    pub authority_issuer: Box<Option<X509Name>>,
-    pub authority_pkey: Option<PrivateKeyEnums>,
-    pub key: PrivateKeyEnums,
+pub struct CertArgs<'a> {
+    pub authority_issuer: Option<X509Name>,
+    pub authority_pkey: Option<PKey<Private>>,
+    pub key: &'a dyn Key,
     pub name: String,
-    pub cert_entries: Box<CertEntries>
+    pub cert_entries: X509CertEntries
 }

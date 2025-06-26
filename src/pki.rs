@@ -5,37 +5,33 @@ use std::{
     collections::HashMap,
 };
 
-use openssl::{
-    pkey::Private,
-    rsa::Rsa,
-    x509::X509
-};
+use openssl::error::ErrorStack;
+use openssl::pkey::{PKey, Private};
+use openssl::x509::X509;
+
 use log::{info, debug};
 
 use serde_json::to_string_pretty;
 
-use crate::configuration::Configuration;
-
-use super::certificates::{
-    CertArgs,
-    PrivateKeyEnums,
-    PrivateKeyEnums::PrivateRsa,
-    x509::{generate_certificate, generate_authority}
+use crate::certificates::x509::generate_certificate;
+use crate::key::Key;
+use crate::{
+    certificates::{
+        CertArgs,
+        x509::generate_authority
+    },
+    configuration::Configuration,
+    serializer::pki::PkiSerializer,
+    PEM_DIR,
+    CERTS_DIR
 };
-
-use super::Serializer;
-
-pub mod serializer;
-
-const PEM_DIR: &'static str = "private";
-const CERTS_DIR: &'static str = "certs";
 
 #[derive(Clone)]
 pub struct Pki {
-    authorities: HashMap<String, (X509, PrivateKeyEnums)>,
-    certs: HashMap<String, (X509, PrivateKeyEnums)>,
+    authorities: HashMap<String, (X509, PKey<Private>)>,
+    certs: HashMap<String, (X509, PKey<Private>)>,
     path: PathBuf,
-    serializer: Serializer,
+    serializer: PkiSerializer,
     configuration: Configuration
 }
 
@@ -59,55 +55,9 @@ impl Pki {
             authorities: HashMap::new(),
             certs: HashMap::new(),
             path,
-            serializer: Serializer::new(filename),
+            serializer: PkiSerializer::new(filename),
             configuration
         })
-    }
-
-    pub fn add_rsa_authority(self: &mut Self, length: u32, name: &String) -> Result<&Self, Error> {
-        // TODO Add Subauth
-        info!("Add new RSA authority {} on {}", name, self.path.to_string_lossy());
-        let key: Rsa<Private> = Rsa::generate(length)?;
-
-        let cert: X509 = generate_authority(
-            CertArgs {
-                authority_issuer: Box::new(None),
-                authority_pkey: None,
-                key: PrivateRsa(key.to_owned()),
-                name: name.to_owned(),
-                cert_entries: Box::new(self.configuration.x509_certs_entries.clone())
-            }
-        )?;
-
-        self.write_files(name, cert.to_pem().unwrap(), key.private_key_to_pem().unwrap())?;
-
-        self.authorities.insert(name.to_owned(), (cert, PrivateRsa(key)));
-        self.serializer.add_certificate(name,name, length);
-
-        Ok(self)
-    }
-
-    pub fn add_rsa_certificate(self: &mut Self, length: u32, name: &String, authority_name: &String) -> Result<&Self, Error> {
-        info!("Add new RSA certificate {} signed by {} on {}", name, authority_name, self.path.to_string_lossy());
-        let key: Rsa<Private> = Rsa::generate(length)?;
-        let (issuer_cert, issuer_key): &(X509, PrivateKeyEnums) = self.authorities.get(authority_name).unwrap();
-
-        let cert: X509 = generate_certificate(
-            CertArgs {
-                authority_issuer: Box::new(Some(issuer_cert.subject_name().to_owned()?)),
-                authority_pkey: Some(issuer_key.to_owned()),
-                key: PrivateRsa(key.to_owned()),
-                name: name.to_owned(),
-                cert_entries: Box::new(self.configuration.x509_certs_entries.clone())
-            }
-        )?;
-
-        self.write_files(name, cert.to_pem().unwrap(), key.private_key_to_pem().unwrap())?;
-
-        self.certs.insert(name.to_owned(), (cert, PrivateRsa(key)));
-        self.serializer.add_certificate(name, authority_name, length);
-
-        Ok(self)
     }
 
     pub fn get_configuration(self: &Self) -> Configuration {
@@ -116,6 +66,48 @@ impl Pki {
 
     pub fn get_path(self: &Self) -> PathBuf {
         self.path.clone()
+    }
+
+    pub fn add_authnority(self: &mut Self, name: &String, key: &dyn Key) -> Result<&Self, ErrorStack> {
+        let cert = generate_authority(
+            CertArgs {
+                authority_issuer: None,
+                authority_pkey: None,
+                key,
+                name: name.to_owned(),
+                cert_entries: self.configuration.x509_certs_entries.clone()
+            }
+        )?;
+
+        self.authorities.insert(name.to_owned(), (cert.clone(), key.get_private_key()?));
+
+        let pem = cert.to_pem()?;
+        self.write_files(name, pem, key.to_pem()?).expect("TODO better management of errors");
+
+        Ok(self)
+    }
+
+    pub fn add_certificate(self: &mut Self, name: &String, authority_name: &String, key: &dyn Key) -> Result<&Self, Error> {
+
+
+        let (issuer_cert, issuer_key) = self.authorities.get(authority_name)
+            .ok_or_else(|| Error::new(std::io::ErrorKind::NotFound, format!("Authority {} not found", authority_name)))?;
+        let cert = generate_certificate(
+            CertArgs {
+                authority_issuer: Some(issuer_cert.subject_name().to_owned()?),
+                authority_pkey: Some(issuer_key.to_owned()),
+                key,
+                name: name.to_owned(),
+                cert_entries: self.configuration.x509_certs_entries.clone()
+            }
+        )?;
+
+        self.certs.insert(name.to_owned(), (cert.clone(), key.get_private_key()?));
+        // self.serializer.add_certificate(name, authority_name, key.get_key_length());
+        self.write_files(name, cert.to_pem()?, key.to_pem()?)?;
+
+        Ok(self)
+
     }
 
     pub fn save(self: &Self) -> Result<&Self, std::io::Error> {
