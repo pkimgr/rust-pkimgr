@@ -1,12 +1,11 @@
 use std::fs::{ File, create_dir_all };
 use std::path::{Path, PathBuf};
 use std::{
-    io::{ Error, Write },
+    io::{ Error, Write, ErrorKind },
     collections::HashMap,
 };
 
 use openssl::error::ErrorStack;
-use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
 
 use log::{info, debug};
@@ -14,7 +13,7 @@ use log::{info, debug};
 use serde_json::to_string_pretty;
 
 use crate::certificates::x509::generate_certificate;
-use crate::key::Key;
+use crate::key::KeyType;
 use crate::{
     certificates::{
         CertArgs,
@@ -28,8 +27,8 @@ use crate::{
 
 #[derive(Clone)]
 pub struct Pki {
-    authorities: HashMap<String, (X509, PKey<Private>)>,
-    certs: HashMap<String, (X509, PKey<Private>)>,
+    authorities: HashMap<String, (X509, KeyType)>,
+    certs: HashMap<String, (X509, KeyType)>,
     path: PathBuf,
     serializer: PkiSerializer,
     configuration: Configuration
@@ -68,58 +67,63 @@ impl Pki {
         self.path.clone()
     }
 
-    pub fn add_authnority(self: &mut Self, name: &String, key: &dyn Key) -> Result<&Self, ErrorStack> {
+    pub fn add_authnority(self: &mut Self, name: &String, key: KeyType) -> Result<&Self, ErrorStack> {
         let cert = generate_authority(
             CertArgs {
                 authority_issuer: None,
                 authority_pkey: None,
-                key,
+                key: key.clone(),
                 name: name.to_owned(),
                 cert_entries: self.configuration.x509_certs_entries.clone()
             }
         )?;
 
-        self.authorities.insert(name.to_owned(), (cert.clone(), key.get_private_key()?));
-
-        let pem = cert.to_pem()?;
-        self.write_files(name, pem, key.to_pem()?).expect("TODO better management of errors");
+        self.authorities.insert(name.to_owned(), (cert.clone(), key));
 
         Ok(self)
     }
 
-    pub fn add_certificate(self: &mut Self, name: &String, authority_name: &String, key: &dyn Key) -> Result<&Self, Error> {
+    pub fn add_certificate(self: &mut Self, name: &String, authority_name: &String, key: KeyType) -> Result<&Self, Error> {
 
 
-        let (issuer_cert, issuer_key) = self.authorities.get(authority_name)
-            .ok_or_else(|| Error::new(std::io::ErrorKind::NotFound, format!("Authority {} not found", authority_name)))?;
+        let (issuer_cert, issuer_key) = self.authorities
+            .get(authority_name)
+            .ok_or_else(|| Error::new(ErrorKind::NotFound, format!("Authority {} not found", authority_name)))?;
+
         let cert = generate_certificate(
             CertArgs {
                 authority_issuer: Some(issuer_cert.subject_name().to_owned()?),
                 authority_pkey: Some(issuer_key.to_owned()),
-                key,
+                key: key.clone(),
                 name: name.to_owned(),
                 cert_entries: self.configuration.x509_certs_entries.clone()
             }
         )?;
 
-        self.certs.insert(name.to_owned(), (cert.clone(), key.get_private_key()?));
-        // self.serializer.add_certificate(name, authority_name, key.get_key_length());
-        self.write_files(name, cert.to_pem()?, key.to_pem()?)?;
+        self.certs.insert(name.to_owned(), (cert.clone(), key));
 
         Ok(self)
 
     }
 
-    pub fn save(self: &Self) -> Result<&Self, std::io::Error> {
+    pub fn save(self: &Self) -> Result<&Self, Error> {
         let mut metadata_file: File = File::create(Path::join(self.path.as_ref(), "metadata.json"))?;
         metadata_file.write_all(
             to_string_pretty(&self.serializer).unwrap().as_bytes()
         )?;
 
+        for (name, (cert, key)) in self.certs.iter() {
+            self.write_files(name, cert.to_pem()?, key.to_pem()?)?;
+        }
+
+        for (name, (cert, key)) in self.certs.iter() {
+            self.write_files(name, cert.to_pem()?, key.to_pem()?)?;
+        }
+
         Ok(self)
     }
-    // Privates
 
+    // Privates
     fn join_path(self: &Self, to_join: &str) -> String {
         String::from(
             Path::join(self.path.as_path(), to_join)

@@ -24,7 +24,7 @@ pub fn generate_authority(args: CertArgs) -> Result<X509, ErrorStack> {
     name_builder.append_entry_by_text("CN", &args.name)?;
 
     let name: X509Name = name_builder.build();
-    let public_key: PKey<Public> = args.key.get_public_key()?;
+    let public_key: PKey<Public> = args.key.to_public_pkey()?;
 
     // builder
     let mut cert_builder: X509Builder  =  _get_x509_builder(&args.cert_entries, &public_key)?;
@@ -45,7 +45,7 @@ pub fn generate_authority(args: CertArgs) -> Result<X509, ErrorStack> {
             .build()?
     )?;
 
-    let private_key: PKey<Private> = args.key.get_private_key()?;
+    let private_key: PKey<Private> = args.key.to_private_pkey()?;
     cert_builder.sign(&private_key, MessageDigest::sha3_256())?;
 
     Ok(cert_builder.build())
@@ -57,15 +57,18 @@ pub fn generate_certificate(args: CertArgs) -> Result<X509, ErrorStack> {
     name_builder.append_entry_by_text("CN", &args.name)?;
 
     // Create CSR
-    let key: PKey<Private> = args.key.get_private_key()?;
+    let key: PKey<Private> = args.key.to_private_pkey()?;
     let req: X509Req = _get_x509_req(&key, name_builder)?;
 
     // Authority key
     let cert_authority: &X509Name = &args.authority_issuer.ok_or(ErrorStack::get())?;
-    let ca_pkey: PKey<Private> = args.authority_pkey.ok_or(ErrorStack::get())?;
+    let ca_pkey: PKey<Private> = args.authority_pkey
+        .ok_or(ErrorStack::get())
+        .and_then(|pkey| pkey.to_private_pkey())?
+    ;
 
     // cert
-    let public_key: PKey<Public> = args.key.get_public_key()?;
+    let public_key: PKey<Public> = args.key.to_public_pkey()?;
     let mut cert_builder: X509Builder = _get_x509_builder(&args.cert_entries, &public_key)?;
     cert_builder.set_subject_name(&req.subject_name())?;
     cert_builder.set_issuer_name(cert_authority)?;

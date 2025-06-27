@@ -2,10 +2,8 @@ use std::{
     collections::HashMap, fs::File, io::BufReader, path::PathBuf
 };
 
-use openssl::{ec::{EcKey, EcGroup}, nid::Nid, rsa::Rsa};
-
 use crate::{
-    configuration::Configuration, key::Key, pki::Pki, serializer::pki::PkiSerializer, DEFAULT_KEYLEN
+    configuration::Configuration, key::KeyType, pki::Pki, serializer::pki::PkiSerializer
 };
 
 #[derive(Clone)]
@@ -45,7 +43,7 @@ impl Pkimgr {
         self
     }
 
-    pub fn add_authnority(self: &mut Self, pki_name: &String, cert_name: &String, key: &dyn Key) -> Result<&Self, String> {
+    pub fn add_authnority(self: &mut Self, pki_name: &String, cert_name: &String, key: KeyType) -> Result<&Self, String> {
         let pki = self.pki.get_mut(pki_name)
             .ok_or_else(|| format!("PKI {} not found", pki_name))?;
 
@@ -55,7 +53,7 @@ impl Pkimgr {
         Ok(self)
     }
 
-    pub fn add_certificate(self: &mut Self, pki_name: &String, cert_name: &String, authority_name: &String, key: &dyn Key) -> Result<&Self, String> {
+    pub fn add_certificate(self: &mut Self, pki_name: &String, cert_name: &String, authority_name: &String, key: KeyType) -> Result<&Self, String> {
         let pki = self.pki.get_mut(pki_name)
             .ok_or_else(|| format!("PKI {} not found", pki_name))?;
 
@@ -77,31 +75,25 @@ impl Pkimgr {
         self.new_pki(&pki_serialized.pki_name, None);
 
         // Add Root Authority
-        let key = Rsa::generate(
-            pki_serialized.root.keylen.unwrap_or(DEFAULT_KEYLEN)
-        ).expect("Failed to generate RSA key");
+        let key = KeyType::new(
+            pki_serialized.root.keylen,
+            pki_serialized.root.curve
+        ).map_err(|err| format!("Failed to create root key: {}", err))?;
 
-        self.add_authnority(&pki_serialized.pki_name, &pki_serialized.root.cname, &key)?;
+        self.add_authnority(&pki_serialized.pki_name, &pki_serialized.root.cname, key)?;
 
         for cert in pki_serialized.root.subcerts {
             if cert.subcerts.len() == 0 {
-                let key: Box<dyn Key> = match (cert.keylen, cert.curve) {
-                    (Some(len), None) => Box::new(Rsa::generate(len).expect("Failed to generate RSA key")),
-                    (None, Some(_)) => {
-                        let group = EcGroup::from_curve_name(Nid::SECP256K1).expect("TODO BETTer");
-                        Box::new(
-                            EcKey::generate(&group)
-                                .map_err(|err| format!("Failed to generate EC key: {}", err))?
-                        )
-                    }
-                    _ => Box::new(Rsa::generate(DEFAULT_KEYLEN).expect("Failed to generate RSA key"))
-                };
+                let key = KeyType::new(
+                    cert.keylen,
+                    cert.curve
+                ).map_err(|err| format!("Failed to create certificate {} key: {}", &cert.cname, err))?;
 
                 self.add_certificate(
                     &pki_serialized.pki_name,
                     &cert.cname,
                     &pki_serialized.root.cname,
-                    key.as_ref()
+                    key
                 ).map_err(|err| format!("Failed to add certificate: {}", err))?;
             }
         }

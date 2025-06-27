@@ -20,7 +20,5 @@ pub const BANNER: &str = r#"
           rust edition        /____/
 "#;
 
-const DEFAULT_KEYLEN: u32 = 4096;
 const PEM_DIR: &'static str = "private";
 const CERTS_DIR: &'static str = "certs";
-
