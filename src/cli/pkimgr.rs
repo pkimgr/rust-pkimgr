@@ -1,9 +1,14 @@
 use std::{
-    collections::HashMap, fs::File, io::BufReader, path::PathBuf
+    collections::HashMap, fs::File, io::BufReader, path::PathBuf,
 };
 
+use log::info;
+
 use crate::{
-    configuration::Configuration, key::KeyType, pki::Pki, serializer::pki::PkiSerializer
+    configuration::Configuration,
+    key::KeyType,
+    pki::Pki,
+    serializer::pki::{PkiSerializer, SerializedCertificate}
 };
 
 #[derive(Clone)]
@@ -43,20 +48,17 @@ impl Pkimgr {
         self
     }
 
-    pub fn add_authnority(self: &mut Self, pki_name: &String, cert_name: &String, key: KeyType) -> Result<&Self, String> {
-        let pki = self.pki.get_mut(pki_name)
-            .ok_or_else(|| format!("PKI {} not found", pki_name))?;
+    pub fn add_authority(self: &mut Self, pki_name: &String, auth_name: Option<&String>, cert_name: &String, key: KeyType) -> Result<&Self, String> {
+        let pki = self.get_mut_pki_from_name(pki_name)?;
 
-        pki.add_authnority(cert_name, key)
+        pki.add_authority(cert_name, auth_name, key)
             .map_err(|err| format!("Failed to add authority: {}", err))?;
 
         Ok(self)
     }
 
     pub fn add_certificate(self: &mut Self, pki_name: &String, cert_name: &String, authority_name: &String, key: KeyType) -> Result<&Self, String> {
-        let pki = self.pki.get_mut(pki_name)
-            .ok_or_else(|| format!("PKI {} not found", pki_name))?;
-
+        let pki = self.get_mut_pki_from_name(pki_name)?;
 
         pki.add_certificate(
             cert_name,
@@ -67,10 +69,18 @@ impl Pkimgr {
         Ok(self)
     }
 
+    pub fn save(self: &Self) -> Result<&Self, String> {
+        for (name, pki) in &self.pki {
+            pki.save().map_err(|err| format!("Failed to save PKI {}: {}", name, err))?;
+        }
+
+        Ok(self)
+    }
+
     pub fn parse_pki_file(self: &mut Self, pki_file: File) -> Result<&Self, String> {
         let pki_serialized: PkiSerializer = serde_json::from_reader(
             BufReader::new(pki_file)
-        ).map_err(|err| format!("RORO {}", err))?;
+        ).map_err(|err: serde_json::Error| format!("RORO {}", err))?;
 
         self.new_pki(&pki_serialized.pki_name, None);
 
@@ -80,24 +90,55 @@ impl Pkimgr {
             pki_serialized.root.curve
         ).map_err(|err| format!("Failed to create root key: {}", err))?;
 
-        self.add_authnority(&pki_serialized.pki_name, &pki_serialized.root.cname, key)?;
+        self.add_authority(&pki_serialized.pki_name, None, &pki_serialized.root.cname, key)?;
 
         for cert in pki_serialized.root.subcerts {
-            if cert.subcerts.len() == 0 {
-                let key = KeyType::new(
-                    cert.keylen,
-                    cert.curve
-                ).map_err(|err| format!("Failed to create certificate {} key: {}", &cert.cname, err))?;
+            self.recurse_cert_manager(&pki_serialized.pki_name, &pki_serialized.root.cname, cert)
+                .map_err(|err| format!("Error while creating certificate: {}", err))?;
+        }
 
-                self.add_certificate(
-                    &pki_serialized.pki_name,
-                    &cert.cname,
-                    &pki_serialized.root.cname,
-                    key
-                ).map_err(|err| format!("Failed to add certificate: {}", err))?;
+        info!("PKI {} created", pki_serialized.pki_name);
+        self.save().map_err(|err| format!("Failed to save PKI after parsing file: {}", err))?;
+
+        Ok(self)
+    }
+
+
+    // Private
+    fn get_mut_pki_from_name(self: &mut Self, pki_name: &String) -> Result<&mut Pki, String> {
+        self.pki.get_mut(pki_name)
+            .ok_or_else(|| format!("PKI {} not found", pki_name))
+    }
+
+    fn recurse_cert_manager(self: &mut Self, pki_name: &String, root: &String, cert: SerializedCertificate) -> Result<(), String> {
+        let key = KeyType::new(
+            cert.keylen,
+            cert.curve
+        ).map_err(|err| format!("Failed to create key for certificate {}: {}", &cert.cname, err))?;
+
+        if cert.subcerts.len() == 0 {
+            info!("Adding certificate {}", &cert.cname);
+            self.add_certificate(
+                pki_name,
+                &cert.cname,
+                root,
+                key
+            ).map_err(|err| format!("Failed to add certificate {}: {}", &cert.cname, err))?;
+        } else {
+            info!("Adding sub CA {} root ({})", &cert.cname, root);
+            self.add_authority(
+                pki_name,
+                Some(root),
+                &cert.cname,
+                key
+            ).map_err(|err| format!("Failed to add authority {}: {}", &cert.cname, err))?;
+
+
+            for sub_cert in cert.subcerts {
+                self.recurse_cert_manager(pki_name, &cert.cname, sub_cert)?;
             }
         }
 
-        Ok(self)
+        Ok(())
     }
 }

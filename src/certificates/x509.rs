@@ -28,7 +28,15 @@ pub fn generate_authority(args: CertArgs) -> Result<X509, ErrorStack> {
 
     // builder
     let mut cert_builder: X509Builder  =  _get_x509_builder(&args.cert_entries, &public_key)?;
-    cert_builder.set_issuer_name(&name)?;
+
+    if args.authority_issuer.is_none() {
+        cert_builder.set_issuer_name(&name)?;
+    } else {
+       let cert_authority: &X509Name = &args.authority_issuer.ok_or(ErrorStack::get())?;
+
+       cert_builder.set_issuer_name(cert_authority)?;
+    }
+
     cert_builder.set_subject_name(&name)?;
 
     // constraints on extensions
@@ -45,7 +53,10 @@ pub fn generate_authority(args: CertArgs) -> Result<X509, ErrorStack> {
             .build()?
     )?;
 
-    let private_key: PKey<Private> = args.key.to_private_pkey()?;
+    let private_key: PKey<Private> = match args.authority_pkey {
+        Some(pkey) => pkey.to_private_pkey()?,
+        None => args.key.to_private_pkey()?
+    };
     cert_builder.sign(&private_key, MessageDigest::sha3_256())?;
 
     Ok(cert_builder.build())

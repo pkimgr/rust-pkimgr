@@ -1,25 +1,23 @@
-use std::fs::{ File, create_dir_all };
-use std::path::{Path, PathBuf};
 use std::{
+    fs::{ File, create_dir_all },
     io::{ Error, Write, ErrorKind },
     collections::HashMap,
+    path::{Path, PathBuf},
 };
 
-use openssl::error::ErrorStack;
 use openssl::x509::X509;
 
 use log::{info, debug};
 
 use serde_json::to_string_pretty;
 
-use crate::certificates::x509::generate_certificate;
-use crate::key::KeyType;
 use crate::{
     certificates::{
         CertArgs,
-        x509::generate_authority
+        x509::{generate_authority, generate_certificate}
     },
     configuration::Configuration,
+    key::KeyType,
     serializer::pki::PkiSerializer,
     PEM_DIR,
     CERTS_DIR
@@ -67,11 +65,22 @@ impl Pki {
         self.path.clone()
     }
 
-    pub fn add_authnority(self: &mut Self, name: &String, key: KeyType) -> Result<&Self, ErrorStack> {
+    pub fn add_authority(self: &mut Self, name: &String, auth_name: Option<&String>, key: KeyType) -> Result<&Self, Error> {
+        let (authority_issuer, authority_pkey) = match auth_name {
+            Some(name) => {
+                let (cert, key) = self.get_authority(name)?;
+
+                (Some(cert.subject_name().to_owned()?), Some(key.to_owned()))
+            },
+            None => (None, None)
+        };
+
+        info!("{} {}", &authority_issuer.is_none(), name);
+
         let cert = generate_authority(
             CertArgs {
-                authority_issuer: None,
-                authority_pkey: None,
+                authority_issuer,
+                authority_pkey,
                 key: key.clone(),
                 name: name.to_owned(),
                 cert_entries: self.configuration.x509_certs_entries.clone()
@@ -83,12 +92,8 @@ impl Pki {
         Ok(self)
     }
 
-    pub fn add_certificate(self: &mut Self, name: &String, authority_name: &String, key: KeyType) -> Result<&Self, Error> {
-
-
-        let (issuer_cert, issuer_key) = self.authorities
-            .get(authority_name)
-            .ok_or_else(|| Error::new(ErrorKind::NotFound, format!("Authority {} not found", authority_name)))?;
+    pub fn add_certificate(self: &mut Self, name: &String, auth_name: &String, key: KeyType) -> Result<&Self, Error> {
+        let (issuer_cert, issuer_key) = self.get_authority(auth_name)?;
 
         let cert = generate_certificate(
             CertArgs {
@@ -112,7 +117,7 @@ impl Pki {
             to_string_pretty(&self.serializer).unwrap().as_bytes()
         )?;
 
-        for (name, (cert, key)) in self.certs.iter() {
+        for (name, (cert, key)) in self.authorities.iter() {
             self.write_files(name, cert.to_pem()?, key.to_pem()?)?;
         }
 
@@ -124,6 +129,11 @@ impl Pki {
     }
 
     // Privates
+    fn get_authority(self: &mut Self, name: &String) -> Result<&(X509, KeyType), Error> {
+        self.authorities.get(name)
+            .ok_or_else(|| Error::new(ErrorKind::NotFound, format!("Authority {} not found", name)))
+    }
+
     fn join_path(self: &Self, to_join: &str) -> String {
         String::from(
             Path::join(self.path.as_path(), to_join)
