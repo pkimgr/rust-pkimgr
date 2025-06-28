@@ -52,7 +52,6 @@ You can visit our [wiki](https://gitlab.com/pkimgr/python/python-pkimgr/-/wikis/
 - Be able to read pki specifications from file
 - Specify cert utility
 - embeed on pkcs12 or pkcs8
-- Rework structs to be able to dot chain creation
 - Move wiki from Gitlab to Github
 
 ## Contribute
