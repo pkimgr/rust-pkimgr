@@ -5,6 +5,7 @@ use crate::key::Key;
 
 pub mod x509;
 
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct X509CertEntries {
     pub country: Box<str>,
@@ -13,6 +14,7 @@ pub struct X509CertEntries {
     pub validity: u32
 }
 
+
 pub struct CertArgs {
     pub authority_issuer: Option<X509Name>,
     pub authority_pkey: Option<Key>,
@@ -20,6 +22,7 @@ pub struct CertArgs {
     pub name: String,
     pub cert_entries: X509CertEntries
 }
+
 
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct Certificate {

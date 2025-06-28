@@ -12,7 +12,7 @@ use serde_json::to_string_pretty;
 
 use crate::{
     certificates::{
-        x509::{x509_to_certificate, generate_authority, generate_certificate},
+        x509::{x509_to_certificate, create_x509_node, create_x509_leaf},
         CertArgs,
         Certificate
     },
@@ -83,9 +83,7 @@ impl Pki {
             None => (None, None)
         };
 
-        info!("{} {}", &authority_issuer.is_none(), name);
-
-        let cert = generate_authority(
+        let cert = create_x509_node(
             CertArgs {
                 authority_issuer,
                 authority_pkey,
@@ -115,7 +113,7 @@ impl Pki {
     pub fn add_certificate(self: &mut Self, name: &String, auth_name: &String, key: Key) -> Result<&Self, Error> {
         let (issuer_cert, issuer_key) = self.get_authority(auth_name)?;
 
-        let cert = generate_certificate(
+        let cert = create_x509_leaf(
             CertArgs {
                 authority_issuer: Some(issuer_cert.subject_name().to_owned()?),
                 authority_pkey: Some(issuer_key.to_owned()),

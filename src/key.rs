@@ -15,19 +15,13 @@ use serde::{Deserialize, Serialize};
 
 const DEFAULT_KEYLEN: u32 = 4096;
 
+
 #[derive(Clone)]
 pub enum Key {
     Rsa(Rsa<Private>),
     Ec(EcKey<Private>),
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Curve {
-    Secp256k1,
-    Secp384r1,
-    Secp521r1,
-}
 
 impl Key {
     pub fn new(length: Option<u32>, curve: Option<String>) -> Result<Key, ErrorStack> {
@@ -48,6 +42,7 @@ impl Key {
         Ok(new_key)
     }
 
+
     pub fn to_private_pkey(&self) -> Result<PKey<Private>, ErrorStack> {
         match self {
             Key::Rsa(key) => PKey::from_rsa(key.clone()),
@@ -55,11 +50,13 @@ impl Key {
         }
     }
 
+
     pub fn to_public_pkey(&self) -> Result<PKey<Public>, ErrorStack> {
         let pem = self.to_private_pkey()?.public_key_to_pem()?;
 
         Ok(PKey::public_key_from_pem(&pem)?)
     }
+
 
     pub fn rsa_len(&self) -> Option<u32> {
         match self {
@@ -67,6 +64,7 @@ impl Key {
             Key::Ec(_) => None,
         }
     }
+
 
     pub fn curve(&self) -> Option<String> {
         match self {
@@ -79,12 +77,22 @@ impl Key {
         }
     }
 
+
     pub fn to_pem(&self) -> Result<Vec<u8>, ErrorStack> {
         self.to_private_pkey()?.private_key_to_pem_pkcs8()
     }
 }
 
 // EC management type
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Curve {
+    Secp256k1,
+    Secp384r1,
+    Secp521r1,
+}
+
+
 impl FromStr for Curve {
     type Err = String;
 
@@ -94,12 +102,14 @@ impl FromStr for Curve {
             "secp384r1" => Ok(Curve::Secp384r1),
             "secp521r1" => Ok(Curve::Secp521r1),
             _ => {
-                info!("Unknown curve: {}. Defaulting to secp256k1.", Curve::Secp256k1);
+                info!("Unknown curve: {}. Defaulting to {}", s, Curve::Secp256k1);
+
                 Ok(Curve::Secp256k1)
             }
         }
     }
 }
+
 
 impl fmt::Display for Curve {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -111,6 +121,7 @@ impl fmt::Display for Curve {
     }
 }
 
+
 impl From<Curve> for Nid {
     fn from(curve: Curve) -> Self {
         match curve {
@@ -120,6 +131,7 @@ impl From<Curve> for Nid {
         }
     }
 }
+
 
 impl TryFrom<Nid> for Curve {
     type Error = String;

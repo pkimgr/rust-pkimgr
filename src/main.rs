@@ -54,7 +54,7 @@ pub fn main() ->Result<()> {
 
     info!("Using {} file to create PKI", args.pki_file);
 
-    manager.parse_pki_file(pki_file).expect("Cannot parse PKI file");
+    manager.create_from_file(pki_file).expect("Cannot parse PKI file");
 
     Ok(())
 }
