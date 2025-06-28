@@ -4,6 +4,8 @@ Simple PKI manager CLI.
 
 With this project, you'll be able to create your own PKI !
 
+> [!CAUTION]
+> For safety reasons, **do not use** this project for **Production**, we cannot ensure maintains, features,...
 ## Installation
 
 Download the source and compile with
