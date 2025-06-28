@@ -1,14 +1,17 @@
 use std::{
-    collections::HashMap, fs::File, io::BufReader, path::PathBuf,
+    collections::HashMap,
+    fs::File,
+    io::BufReader,
+    path::PathBuf,
 };
 
 use log::info;
 
 use crate::{
+    certificates::Certificate,
     configuration::Configuration,
-    key::KeyType,
-    pki::Pki,
-    serializer::pki::{PkiSerializer, SerializedCertificate}
+    key::Key,
+    pki::{Pki, PkiJSON}
 };
 
 #[derive(Clone)]
@@ -22,7 +25,6 @@ impl Pkimgr {
     pub fn new(configuration: Configuration, base_path: PathBuf) ->  Pkimgr {
         Pkimgr {
             default_conf: configuration,
-            // certs_builder,
             base_path,
             pki: HashMap::new()
         }
@@ -48,7 +50,7 @@ impl Pkimgr {
         self
     }
 
-    pub fn add_authority(self: &mut Self, pki_name: &String, auth_name: Option<&String>, cert_name: &String, key: KeyType) -> Result<&Self, String> {
+    pub fn add_authority(self: &mut Self, pki_name: &String, auth_name: Option<&String>, cert_name: &String, key: Key) -> Result<&Self, String> {
         let pki = self.get_mut_pki_from_name(pki_name)?;
 
         pki.add_authority(cert_name, auth_name, key)
@@ -57,7 +59,7 @@ impl Pkimgr {
         Ok(self)
     }
 
-    pub fn add_certificate(self: &mut Self, pki_name: &String, cert_name: &String, authority_name: &String, key: KeyType) -> Result<&Self, String> {
+    pub fn add_certificate(self: &mut Self, pki_name: &String, cert_name: &String, authority_name: &String, key: Key) -> Result<&Self, String> {
         let pki = self.get_mut_pki_from_name(pki_name)?;
 
         pki.add_certificate(
@@ -78,26 +80,26 @@ impl Pkimgr {
     }
 
     pub fn parse_pki_file(self: &mut Self, pki_file: File) -> Result<&Self, String> {
-        let pki_serialized: PkiSerializer = serde_json::from_reader(
+        let json: PkiJSON = serde_json::from_reader(
             BufReader::new(pki_file)
         ).map_err(|err: serde_json::Error| format!("RORO {}", err))?;
 
-        self.new_pki(&pki_serialized.pki_name, None);
+        self.new_pki(&json.pki_name, None);
 
         // Add Root Authority
-        let key = KeyType::new(
-            pki_serialized.root.keylen,
-            pki_serialized.root.curve
+        let key = Key::new(
+            json.root.keylen,
+            json.root.curve
         ).map_err(|err| format!("Failed to create root key: {}", err))?;
 
-        self.add_authority(&pki_serialized.pki_name, None, &pki_serialized.root.cname, key)?;
+        self.add_authority(&json.pki_name, None, &json.root.cname, key)?;
 
-        for cert in pki_serialized.root.subcerts {
-            self.recurse_cert_manager(&pki_serialized.pki_name, &pki_serialized.root.cname, cert)
+        for cert in json.root.subcerts {
+            self.recurse_cert_manager(&json.pki_name, &json.root.cname, cert)
                 .map_err(|err| format!("Error while creating certificate: {}", err))?;
         }
 
-        info!("PKI {} created", pki_serialized.pki_name);
+        info!("PKI {} created", json.pki_name);
         self.save().map_err(|err| format!("Failed to save PKI after parsing file: {}", err))?;
 
         Ok(self)
@@ -110,8 +112,8 @@ impl Pkimgr {
             .ok_or_else(|| format!("PKI {} not found", pki_name))
     }
 
-    fn recurse_cert_manager(self: &mut Self, pki_name: &String, root: &String, cert: SerializedCertificate) -> Result<(), String> {
-        let key = KeyType::new(
+    fn recurse_cert_manager(self: &mut Self, pki_name: &String, root: &String, cert: Certificate) -> Result<(), String> {
+        let key = Key::new(
             cert.keylen,
             cert.curve
         ).map_err(|err| format!("Failed to create key for certificate {}: {}", &cert.cname, err))?;

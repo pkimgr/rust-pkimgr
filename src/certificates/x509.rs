@@ -15,7 +15,10 @@ use openssl::{
     }
 };
 
-use crate::certificates::{X509CertEntries, CertArgs};
+use crate::{
+    certificates::{CertArgs, Certificate, X509CertEntries},
+    key::Key
+};
 
 
 pub fn generate_authority(args: CertArgs) -> Result<X509, ErrorStack> {
@@ -88,6 +91,20 @@ pub fn generate_certificate(args: CertArgs) -> Result<X509, ErrorStack> {
 
     Ok(cert_builder.build())
 }
+
+
+pub fn x509_to_certificate(cert: &X509, key: &Key) -> Certificate {
+    Certificate {
+        cname: cert.subject_name().entries_by_nid(openssl::nid::Nid::COMMONNAME)
+            .next()
+            .map(|entry| entry.data().as_utf8().unwrap().to_string())
+            .unwrap_or_default(),
+        subcerts: vec![],
+        keylen: key.rsa_len(),
+        curve: key.curve()
+    }
+}
+
 
 fn _get_name_builder(cert_conf: &X509CertEntries) -> Result<X509NameBuilder, ErrorStack> {
     let mut name_builder: X509NameBuilder = X509NameBuilder::new()?;

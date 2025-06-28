@@ -1,34 +1,39 @@
 use std::{
-    fs::{ File, create_dir_all },
-    io::{ Error, Write, ErrorKind },
     collections::HashMap,
-    path::{Path, PathBuf},
+    fs::{ create_dir_all, File },
+    io::{ Error, ErrorKind, Write },
+    path::{Path, PathBuf}
 };
 
 use openssl::x509::X509;
-
 use log::{info, debug};
-
+use serde::{Serialize, Deserialize};
 use serde_json::to_string_pretty;
 
 use crate::{
     certificates::{
+        x509::{x509_to_certificate, generate_authority, generate_certificate},
         CertArgs,
-        x509::{generate_authority, generate_certificate}
+        Certificate
     },
     configuration::Configuration,
-    key::KeyType,
-    serializer::pki::PkiSerializer,
-    PEM_DIR,
-    CERTS_DIR
+    key::Key,
+    CERTS_DIR,
+    PEM_DIR
 };
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PkiJSON {
+    pub pki_name: String,
+    pub root: Certificate
+}
 
 #[derive(Clone)]
 pub struct Pki {
-    authorities: HashMap<String, (X509, KeyType)>,
-    certs: HashMap<String, (X509, KeyType)>,
+    authorities: HashMap<String, (X509, Key)>,
+    certs: HashMap<String, (X509, Key)>,
     path: PathBuf,
-    serializer: PkiSerializer,
+    json: PkiJSON,
     configuration: Configuration
 }
 
@@ -52,7 +57,10 @@ impl Pki {
             authorities: HashMap::new(),
             certs: HashMap::new(),
             path,
-            serializer: PkiSerializer::new(filename),
+            json: PkiJSON {
+                pki_name: filename,
+                root: Certificate::default()
+            },
             configuration
         })
     }
@@ -65,7 +73,7 @@ impl Pki {
         self.path.clone()
     }
 
-    pub fn add_authority(self: &mut Self, name: &String, auth_name: Option<&String>, key: KeyType) -> Result<&Self, Error> {
+    pub fn add_authority(self: &mut Self, name: &String, auth_name: Option<&String>, key: Key) -> Result<&Self, Error> {
         let (authority_issuer, authority_pkey) = match auth_name {
             Some(name) => {
                 let (cert, key) = self.get_authority(name)?;
@@ -87,12 +95,24 @@ impl Pki {
             }
         )?;
 
+        if auth_name.is_none() {
+            self.json.root = x509_to_certificate(&cert, &key).clone();
+        } else {
+            serialize(
+                &mut self.json.root,
+                &x509_to_certificate(&cert, &key),
+                &name,
+                &auth_name.unwrap_or(&name),
+                &key
+            );
+        }
+
         self.authorities.insert(name.to_owned(), (cert.clone(), key));
 
         Ok(self)
     }
 
-    pub fn add_certificate(self: &mut Self, name: &String, auth_name: &String, key: KeyType) -> Result<&Self, Error> {
+    pub fn add_certificate(self: &mut Self, name: &String, auth_name: &String, key: Key) -> Result<&Self, Error> {
         let (issuer_cert, issuer_key) = self.get_authority(auth_name)?;
 
         let cert = generate_certificate(
@@ -105,6 +125,14 @@ impl Pki {
             }
         )?;
 
+        serialize(
+            &mut self.json.root,
+            &x509_to_certificate(&cert, &key),
+            &name,
+            &auth_name,
+            &key
+        );
+
         self.certs.insert(name.to_owned(), (cert.clone(), key));
 
         Ok(self)
@@ -114,7 +142,7 @@ impl Pki {
     pub fn save(self: &Self) -> Result<&Self, Error> {
         let mut metadata_file: File = File::create(Path::join(self.path.as_ref(), "metadata.json"))?;
         metadata_file.write_all(
-            to_string_pretty(&self.serializer).unwrap().as_bytes()
+            to_string_pretty(&self.json)?.as_bytes()
         )?;
 
         for (name, (cert, key)) in self.authorities.iter() {
@@ -129,7 +157,7 @@ impl Pki {
     }
 
     // Privates
-    fn get_authority(self: &mut Self, name: &String) -> Result<&(X509, KeyType), Error> {
+    fn get_authority(self: &mut Self, name: &String) -> Result<&(X509, Key), Error> {
         self.authorities.get(name)
             .ok_or_else(|| Error::new(ErrorKind::NotFound, format!("Authority {} not found", name)))
     }
@@ -155,4 +183,19 @@ impl Pki {
 
         Ok(())
     }
+}
+
+fn serialize(root: &mut Certificate, cert: &Certificate, cname: &String, auth_cname: &String, key: &Key) -> bool {
+    if root.cname == *auth_cname {
+        root.subcerts.push(cert.clone());
+        return true;
+    }
+
+    for subcert in root.subcerts.iter_mut() {
+        if serialize(subcert, cert, cname, auth_cname, key) {
+            return true;
+        }
+    }
+
+    false
 }

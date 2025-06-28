@@ -4,7 +4,6 @@ pub mod pki;
 
 pub mod configuration;
 pub mod cli;
-pub mod serializer;
 
 pub const BANNER: &str = r#"
            __                    __  ____      __         __
