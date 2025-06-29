@@ -1,25 +1,17 @@
-use std::{
-    collections::HashMap,
-    fs::{ create_dir_all, File },
-    io::{ Error, ErrorKind, Write },
-    path::{Path, PathBuf}
-};
+use core::fmt;
+use std::collections::HashMap;
 
+use log::error;
 use openssl::x509::X509;
-use log::{info, debug};
 use serde::{Serialize, Deserialize};
-use serde_json::to_string_pretty;
+use serde_json;
 
 use crate::{
     certificates::{
-        x509::{x509_to_certificate, create_x509_node, create_x509_leaf},
+        x509::{create_x509_leaf, create_x509_node, x509_to_certificate},
         CertArgs,
         Certificate
-    },
-    configuration::Configuration,
-    key::Key,
-    CERTS_DIR,
-    PEM_DIR
+    }, Configuration, error::PKIError, key::Key
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -28,55 +20,61 @@ pub struct PkiJSON {
     pub root: Certificate
 }
 
+impl fmt::Display for PkiJSON {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            serde_json::to_string_pretty(&self).unwrap_or_else(|err| {
+                error!("Cannot write metadata: {}", err);
+                err.to_string()
+            })
+        )
+
+    }
+}
+
 #[derive(Clone)]
 pub struct Pki {
-    authorities: HashMap<String, (X509, Key)>,
-    certs: HashMap<String, (X509, Key)>,
-    path: PathBuf,
-    json: PkiJSON,
+    pub name: String,
+    pub authorities: HashMap<String, (X509, Key)>,
+    pub certs: HashMap<String, (X509, Key)>,
+    // path: PathBuf,
+    pub json: PkiJSON,
     configuration: Configuration
 }
 
 impl Pki {
-    pub fn new(path: PathBuf, configuration: Configuration) -> Result<Pki, Error> {
-        if !Path::exists(path.as_ref()) {
-            debug!("{} not found, create it", path.to_string_lossy());
-
-            create_dir_all(Path::join(path.as_ref(), PEM_DIR))?;
-            create_dir_all(Path::join(path.as_ref(), CERTS_DIR))?;
-        } else {
-            debug!("{} found, load it", path.to_string_lossy());
-            // TODO load PKI
-        }
-
-        let filename = String::from(path.file_name().unwrap()
-            .to_str().unwrap());
-
-        info!("New pki on {} ready", path.to_string_lossy());
-        Ok(Pki {
+    pub fn new(pki_name: &String, configuration: Configuration) -> Pki {
+        Pki {
+            name: pki_name.into(),
             authorities: HashMap::new(),
             certs: HashMap::new(),
-            path,
             json: PkiJSON {
-                pki_name: filename,
+                pki_name: pki_name.into(),
                 root: Certificate::default()
             },
             configuration
-        })
+        }
     }
+
+
+    pub fn load(json: PkiJSON, configuration: Configuration) -> Pki {
+        // TODO Load existing PKI here
+        // must be removed
+        Pki::new(&json.pki_name, configuration)
+    }
+
 
     pub fn get_configuration(self: &Self) -> Configuration {
         self.configuration.clone()
     }
 
-    pub fn get_path(self: &Self) -> PathBuf {
-        self.path.clone()
-    }
 
-    pub fn add_authority(self: &mut Self, name: &String, auth_name: Option<&String>, key: Key) -> Result<&Self, Error> {
+    pub fn add_authority(self: &mut Self, name: &String, auth_name: Option<&String>, key: Key) -> Result<&Self, PKIError> {
         let (authority_issuer, authority_pkey) = match auth_name {
             Some(name) => {
-                let (cert, key) = self.get_authority(name)?;
+                let (cert, key) = self.find_authority(name)?;
 
                 (Some(cert.subject_name().to_owned()?), Some(key.to_owned()))
             },
@@ -110,8 +108,9 @@ impl Pki {
         Ok(self)
     }
 
-    pub fn add_certificate(self: &mut Self, name: &String, auth_name: &String, key: Key) -> Result<&Self, Error> {
-        let (issuer_cert, issuer_key) = self.get_authority(auth_name)?;
+
+    pub fn add_certificate(self: &mut Self, name: &String, auth_name: &String, key: Key) -> Result<&Self, PKIError> {
+        let (issuer_cert, issuer_key) = self.find_authority(auth_name)?;
 
         let cert = create_x509_leaf(
             CertArgs {
@@ -137,49 +136,11 @@ impl Pki {
 
     }
 
-    pub fn save(self: &Self) -> Result<&Self, Error> {
-        let mut metadata_file: File = File::create(Path::join(self.path.as_ref(), "metadata.json"))?;
-        metadata_file.write_all(
-            to_string_pretty(&self.json)?.as_bytes()
-        )?;
-
-        for (name, (cert, key)) in self.authorities.iter() {
-            self.write_files(name, cert.to_pem()?, key.to_pem()?)?;
-        }
-
-        for (name, (cert, key)) in self.certs.iter() {
-            self.write_files(name, cert.to_pem()?, key.to_pem()?)?;
-        }
-
-        Ok(self)
-    }
 
     // Privates
-    fn get_authority(self: &mut Self, name: &String) -> Result<&(X509, Key), Error> {
+    fn find_authority(self: &mut Self, name: &String) -> Result<&(X509, Key), PKIError> {
         self.authorities.get(name)
-            .ok_or_else(|| Error::new(ErrorKind::NotFound, format!("Authority {} not found", name)))
-    }
-
-    fn join_path(self: &Self, to_join: &str) -> String {
-        String::from(
-            Path::join(self.path.as_path(), to_join)
-                .to_str()
-                .unwrap_or("default")
-        )
-    }
-
-    fn write_files(self: &Self, name: &String, cert_pem: Vec<u8>, private_key: Vec<u8>) -> Result<(), Error> {
-        let mut key_file: File = File::create(
-            format!("{}/{}.pem", self.join_path(PEM_DIR), name)
-        ).unwrap();
-        let mut cert_file: File = File::create(
-            format!("{}/{}.crt", self.join_path(CERTS_DIR), name)
-        ).unwrap();
-
-        key_file.write_all(&private_key)?;
-        cert_file.write_all(&cert_pem)?;
-
-        Ok(())
+            .ok_or_else(|| PKIError::NotFound(format!("{} not found on {}", name, self.name)))
     }
 }
 

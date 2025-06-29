@@ -3,14 +3,13 @@ use std::{
     path::Path
 };
 
-use log::info;
-use serde_json::Result;
+use log::{info, error};
 use clap::Parser;
 use env_logger::{init_from_env, Env};
 
 use pkimgr::{
-    configuration::{Configuration, DEFAULT_CONFIGURATION},
-    cli::pkimgr::Pkimgr,
+    Configuration, DEFAULT_CONFIGURATION,
+    cli::Pkimgr,
     BANNER
 };
 
@@ -29,7 +28,7 @@ struct Args {
     pki_file: String
 }
 
-pub fn main() ->Result<()> {
+pub fn main() ->  () {
     println!("{}", BANNER);
 
     init_from_env(
@@ -43,7 +42,11 @@ pub fn main() ->Result<()> {
         false => fs::read_to_string(args.configuration_file).expect("Cannot read configuration file")
     };
 
-    let configuration: Configuration = serde_json::from_str(&config_str)?;
+    let configuration: Configuration = serde_json::from_str(&config_str)
+        .unwrap_or_else(|err| {
+             error!("Cannot parse configuration file: {}", err);
+             std::process::exit(1);
+        });
 
     let mut manager: Pkimgr = Pkimgr::new(
         configuration,
@@ -54,7 +57,9 @@ pub fn main() ->Result<()> {
 
     info!("Using {} file to create PKI", args.pki_file);
 
-    manager.create_from_file(pki_file).expect("Cannot parse PKI file");
-
-    Ok(())
+    manager.create_from_file(pki_file)
+        .unwrap_or_else(|err| {
+            error!("{}", err);
+            std::process::exit(1);
+        });
 }

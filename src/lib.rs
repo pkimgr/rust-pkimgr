@@ -1,9 +1,13 @@
+use serde::{Deserialize, Serialize};
+
+use crate::certificates::X509CertEntries;
+
 pub mod certificates;
 pub mod key;
 pub mod pki;
 
-pub mod configuration;
 pub mod cli;
+pub mod error;
 
 pub const BANNER: &str = r#"
            __                    __  ____      __         __
@@ -21,3 +25,19 @@ pub const BANNER: &str = r#"
 
 const PEM_DIR: &'static str = "private";
 const CERTS_DIR: &'static str = "certs";
+
+
+pub const DEFAULT_CONFIGURATION: &str = r#"
+{
+    "x509_certs_entries": {
+        "country": "UK",
+        "state": "UK",
+        "organization": "PoweredByPKImgr",
+        "validity": 365
+    }
+}"#;
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Configuration {
+    pub x509_certs_entries: X509CertEntries,
+}
