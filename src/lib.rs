@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::certificates::X509CertEntries;
+use crate::certificates::X509Info;
 
 pub mod certificates;
 pub mod key;
@@ -39,5 +39,5 @@ pub const DEFAULT_CONFIGURATION: &str = r#"
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Configuration {
-    pub x509_certs_entries: X509CertEntries,
+    pub x509_certs_entries: X509Info,
 }

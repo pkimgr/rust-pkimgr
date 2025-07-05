@@ -16,7 +16,7 @@ use openssl::{
 };
 
 use crate::{
-    certificates::{CertArgs, Certificate, X509CertEntries},
+    certificates::{CertArgs, Certificate, X509Info},
     key::Key
 };
 
@@ -108,7 +108,7 @@ pub fn x509_to_certificate(cert: &X509, key: &Key) -> Certificate {
 
 
 // Private
-fn _get_name_builder(cert_conf: &X509CertEntries) -> Result<X509NameBuilder, ErrorStack> {
+fn _get_name_builder(cert_conf: &X509Info) -> Result<X509NameBuilder, ErrorStack> {
     let mut name_builder: X509NameBuilder = X509NameBuilder::new()?;
 
     name_builder.append_entry_by_text("C", &cert_conf.country)?;
@@ -119,7 +119,7 @@ fn _get_name_builder(cert_conf: &X509CertEntries) -> Result<X509NameBuilder, Err
 }
 
 
-fn _get_x509_builder(cert_conf: &X509CertEntries, key: &PKey<Public>) -> Result<X509Builder, ErrorStack> {
+fn _get_x509_builder(cert_conf: &X509Info, key: &PKey<Public>) -> Result<X509Builder, ErrorStack> {
     let mut x509_builder : X509Builder= X509::builder()?;
 
     x509_builder.set_version(2)?;

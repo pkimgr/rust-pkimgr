@@ -7,7 +7,7 @@ pub mod x509;
 
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct X509CertEntries {
+pub struct X509Info {
     pub country: Box<str>,
     pub state: Box<str>,
     pub organization: Box<str>,
@@ -20,7 +20,7 @@ pub struct CertArgs {
     pub authority_pkey: Option<Key>,
     pub key: Key,
     pub name: String,
-    pub cert_entries: X509CertEntries
+    pub cert_entries: X509Info
 }
 
 
